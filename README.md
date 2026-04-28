@@ -6,7 +6,7 @@
 [![Docs](https://github.com/oneryalcin/cli-to-py/actions/workflows/pages.yml/badge.svg)](https://github.com/oneryalcin/cli-to-py/actions/workflows/pages.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-Turn CLI binaries into Python APIs.
+Turn CLI binaries into Python APIs for applications and LLM agents.
 
 `cli-to-py` reads a command's help output, builds a callable Python wrapper, and
 lets you run subcommands with keyword arguments instead of hand-built shell
@@ -63,9 +63,32 @@ await git("diff", name_only=True, _=["HEAD~1"])
 # runs: git diff --name-only HEAD~1
 ```
 
+## Why It Exists
+
+Traditional tool calling makes agents call tools one step at a time. That is
+awkward when a task needs loops, branching, arithmetic, retries, filtering, or
+many repeated CLI calls.
+
+`cli-to-py` gives those CLIs a function-shaped Python interface. An agent can
+write code that coordinates commands directly:
+
+```python
+git = await convert("git")
+
+changed = await git("diff", name_only=True, _=["HEAD~1"]).lines()
+for path in changed:
+    if path.endswith(".py"):
+        print(await git("log", oneline=True, n=1, _=["--", path]).text())
+```
+
+That pairs naturally with code-mode interpreters such as
+[Monty](https://github.com/pydantic/monty), where host applications expose a
+controlled set of functions and the agent writes Python to orchestrate them.
+
 ## Why Use It
 
 - Convert CLIs into async Python APIs with no runtime dependencies.
+- Expose command-line tools as functions for agent code-mode workflows.
 - Validate flags and arguments before spawning a subprocess.
 - Keep subprocess output ergonomic with `.text()`, `.lines()`, and `.json()`.
 - Stream output, inherit stdio, set timeouts, pass env/cwd, and cancel work.
@@ -75,6 +98,7 @@ await git("diff", name_only=True, _=["HEAD~1"])
 
 - [Installation](https://oneryalcin.github.io/cli-to-py/getting-started/installation/)
 - [Quick start](https://oneryalcin.github.io/cli-to-py/getting-started/quickstart/)
+- [Agent code mode](https://oneryalcin.github.io/cli-to-py/user-guide/agent-code-mode/)
 - [Validation](https://oneryalcin.github.io/cli-to-py/user-guide/validation/)
 - [Runtime control](https://oneryalcin.github.io/cli-to-py/user-guide/runtime-control/)
 - [Code generation](https://oneryalcin.github.io/cli-to-py/user-guide/code-generation/)

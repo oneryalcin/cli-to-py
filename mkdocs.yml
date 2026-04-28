@@ -26,6 +26,7 @@ nav:
       - Installation: getting-started/installation.md
       - Quick Start: getting-started/quickstart.md
   - User Guide:
+      - Agent Code Mode: user-guide/agent-code-mode.md
       - Validation: user-guide/validation.md
       - Runtime Control: user-guide/runtime-control.md
       - Code Generation: user-guide/code-generation.md
