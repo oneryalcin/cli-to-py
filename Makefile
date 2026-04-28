@@ -2,7 +2,7 @@ UV ?= uv --no-config
 PYTEST ?= python -m pytest
 PYPI_CHECK_URL ?= https://pypi.org/simple/
 
-.PHONY: help test test-unit test-integration build clean ci smoke publish-check publish
+.PHONY: help test test-unit test-integration build clean ci smoke docs docs-serve publish-check publish
 
 help:
 	@printf '%s\n' \
@@ -13,6 +13,8 @@ help:
 		'  make build             Build sdist and wheel' \
 		'  make ci                Run CI-equivalent checks except matrix Python' \
 		'  make smoke             Run local smoke script (not used in CI)' \
+		'  make docs              Build MkDocs documentation' \
+		'  make docs-serve        Serve MkDocs documentation locally' \
 		'  make clean             Remove local generated artifacts' \
 		'  make publish-check     Dry-run publish built artifacts' \
 		'  make publish           Publish built artifacts to PyPI'
@@ -34,8 +36,14 @@ ci: test build
 smoke:
 	$(UV) run --locked python smoke_test.py
 
+docs:
+	$(UV) run --with mkdocs-material mkdocs build --strict
+
+docs-serve:
+	$(UV) run --with mkdocs-material mkdocs serve
+
 clean:
-	rm -rf .pytest_cache dist *.egg-info
+	rm -rf .pytest_cache dist site *.egg-info
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +
 
 publish-check: build

@@ -1,0 +1,45 @@
+site_name: cli-to-py
+site_author: Mehmet Oner Yalcin
+site_url: https://oneryalcin.github.io/cli-to-py/
+site_description: Turn CLI binaries into Python APIs.
+
+theme:
+  name: material
+  palette:
+    primary: indigo
+    accent: indigo
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+
+repo_name: oneryalcin/cli-to-py
+repo_url: https://github.com/oneryalcin/cli-to-py
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+  - User Guide:
+      - Validation: user-guide/validation.md
+      - Runtime Control: user-guide/runtime-control.md
+      - Code Generation: user-guide/code-generation.md
+      - Parser Limits: user-guide/parser-limits.md
+  - API Reference:
+      - Public API: api-reference/public-api.md
+  - Development:
+      - Release Checklist: development/release-checklist.md
+
+markdown_extensions:
+  - admonition
+  - codehilite
+  - pymdownx.highlight
+  - pymdownx.superfences
+  - pymdownx.tabbed
+  - toc:
+      permalink: true
