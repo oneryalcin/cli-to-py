@@ -1,0 +1,12 @@
+"""Magic numbers and defaults for cli_to_py."""
+
+HELP_TIMEOUT_S: float = 10.0
+COMMAND_TIMEOUT_S: float = 30.0
+DESCRIPTION_CONTINUATION_INDENT_MIN: int = 6
+COLUMN_SEPARATOR_MIN_SPACES: int = 2
+SHORT_FLAG_MAX_LENGTH: int = 1
+MAX_SUGGESTION_CUTOFF: float = 0.6
+
+CACHE_DIR_ENV: str = "CLI_TO_PY_CACHE_DIR"
+CACHE_DEFAULT_SUBDIR: str = "cli-to-py"
+CACHE_SCHEMA_VERSION: int = 1

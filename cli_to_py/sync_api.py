@@ -1,0 +1,136 @@
+"""Synchronous CliApi — subprocess.run-based. Same surface, no asyncio.
+
+Inherits plumbing from `_BaseCliApi` so alias resolution, `_config` kwarg
+handling, and equals-flag collection stay in sync with the async variant.
+
+Differences from the async CliApi:
+- Methods return `CommandResult` directly (no awaitable wrapper).
+- `.text()` / `.lines()` / `.json()` live on `CommandResult` itself.
+- `spawn` is not provided — use `convert()` + `await api.spawn(...)` for
+  streaming. The sync stdlib doesn't have a clean async-iteration
+  equivalent; threaded Popen readers would be a future addition.
+- `parse_sync` replaces `parse` (the async variant).
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from ._api_base import _BaseCliApi
+from .command_string import to_command_string
+from .parse_subcommands import parse_subcommand_help_sync
+from .schema import CommandResult, ParsedCommand, ParsedSubcommand
+from .sync_exec import run_command_sync
+from .validate import ValidationError, validate_options
+
+
+class SyncCliApi(_BaseCliApi):
+    """Sync, callable Pythonic wrapper around a CLI binary."""
+
+    def __call__(
+        self, subcommand: str | None = None, /, **kwargs: Any
+    ) -> CommandResult:
+        options, per_call = self._split_kwargs(kwargs)
+        if subcommand is not None:
+            resolved = self._resolve_alias(subcommand)
+            equals = self._equals_for(resolved)
+            return run_command_sync(
+                self.binary_name, [resolved], options,
+                self._merged_config(per_call), equals,
+            )
+        return run_command_sync(
+            self.binary_name, [], options,
+            self._merged_config(per_call), self._equals_flags,
+        )
+
+    def __getattr__(self, name: str) -> Any:
+        if name.startswith("_"):
+            raise AttributeError(name)
+        if self._find_subcommand(name) is None:
+            raise AttributeError(
+                f"{type(self).__name__!s} has no subcommand {name!r}. "
+                f"Use api({name!r}, ...) if your CLI exposes it but --help didn't list it."
+            )
+        resolved = self._resolve_alias(name)
+        equals = self._equals_for(resolved)
+
+        def dispatch(**kwargs: Any) -> CommandResult:
+            options, per_call = self._split_kwargs(kwargs)
+            return run_command_sync(
+                self.binary_name, [resolved], options,
+                self._merged_config(per_call), equals,
+            )
+        dispatch.__name__ = name
+        return dispatch
+
+    def __dir__(self) -> list[str]:
+        base = set(super().__dir__())
+        base.update(self._subcommand_names())
+        return sorted(base)
+
+    # ------------------------------------------------------------------ helpers
+
+    def validate(
+        self, subcommand: str | None = None, /, **options: Any
+    ) -> list[ValidationError]:
+        if subcommand is None:
+            return validate_options(self.schema.command, options)
+        sub = self._find_subcommand(subcommand)
+        if sub is None:
+            raise ValueError(
+                f'Unknown subcommand "{subcommand}". Pass subcommands=True to convert_sync().'
+            )
+        if sub.flags is None:
+            raise ValueError(
+                f'Subcommand "{subcommand}" not enriched. Call parse_sync("{subcommand}") first '
+                f'or pass subcommands=True to convert_sync().'
+            )
+        fake_command = ParsedCommand(
+            name=sub.name,
+            description=sub.description,
+            flags=sub.flags,
+            positional_args=sub.positional_args or [],
+        )
+        return validate_options(fake_command, options)
+
+    def command_string(self, subcommand: str | None = None, /, **options: Any) -> str:
+        if subcommand is None:
+            return to_command_string(self.binary_name, [], options, self._equals_flags)
+        resolved = self._resolve_alias(subcommand)
+        return to_command_string(
+            self.binary_name, [resolved], options, self._equals_for(resolved)
+        )
+
+    def parse_sync(
+        self, subcommand_name: str | None = None
+    ) -> ParsedCommand | None:
+        """Lazily enrich one subcommand (or all) by re-running its --help."""
+        if subcommand_name is None:
+            from .parse_subcommands import enrich_subcommands_sync
+            enrich_subcommands_sync(
+                self.binary_name, self.schema,
+                timeout=self._default_config.resolved_timeout(),
+                cwd=self._default_config.cwd,
+                env=self._default_config.env,
+            )
+            return None
+        parsed = parse_subcommand_help_sync(
+            self.binary_name, subcommand_name,
+            timeout=self._default_config.resolved_timeout(),
+            cwd=self._default_config.cwd,
+            env=self._default_config.env,
+        )
+        if parsed is not None:
+            existing = self._find_subcommand(subcommand_name)
+            if existing is not None:
+                existing.flags = parsed.flags
+                existing.positional_args = parsed.positional_args
+            else:
+                self.schema.command.subcommands.append(ParsedSubcommand(
+                    name=subcommand_name,
+                    aliases=[],
+                    description=parsed.description,
+                    flags=parsed.flags,
+                    positional_args=parsed.positional_args,
+                ))
+        return parsed
