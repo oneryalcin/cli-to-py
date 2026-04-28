@@ -24,9 +24,12 @@ class TestGitAsync:
 
     async def test_branch_show_current_text(self):
         api = await convert("git", subcommands=False)
-        branch = await api.branch(show_current=True).text()
+        result = await api.branch(show_current=True)
+        assert result.exit_code == 0
+        branch = result.text()
         assert isinstance(branch, str)
-        assert branch  # non-empty
+        if not branch:
+            return  # detached HEAD, common in GitHub Actions checkouts
         # The output must be a plausible branch name — alphanumeric + - _ /
         # with no embedded newlines or error noise.
         import re
