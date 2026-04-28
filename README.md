@@ -65,7 +65,7 @@ pip install cli-to-py
 uv add cli-to-py
 ```
 
-Requires Python ≥ 3.10.
+Requires Python >= 3.11.
 
 ## Quick start
 
