@@ -33,8 +33,5 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Run unit and integration tests
-        run: uv run --locked --extra dev python -m pytest -q
-
-      - name: Build package
-        run: uv build
+      - name: Run tests and build package
+        run: make ci
