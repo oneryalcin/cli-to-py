@@ -111,6 +111,15 @@ class TestGetattrDiscipline:
         assert "validate" in entries
         assert "command_string" in entries
 
+    def test_snake_case_attribute_resolves_hyphenated_subcommand(self):
+        api = from_help_text(
+            "tool",
+            "Usage: tool [options]\n\nCommands:\n  do-stuff  do things\n",
+        )
+        assert hasattr(api, "do_stuff")
+        assert api._resolve_alias("do_stuff") == "do-stuff"
+        assert api.command_string("do_stuff") == "tool do-stuff"
+
 
 class TestConfigKwargSafety:
     def test_config_as_non_underscore_kwarg_raises(self):

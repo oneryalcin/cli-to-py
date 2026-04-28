@@ -2,7 +2,7 @@
 
 A Python port of [`millionco/cli-to-js`](https://github.com/millionco/cli-to-js) — turn any CLI binary into a typed Python API, automatically.
 
-Give it a binary name; it runs `--help`, parses the output into a schema, and hands you back an object where subcommands are methods, flags are kwargs, and everything is validated before it spawns.
+Give it a binary name; it runs `--help`, parses the output into a schema, and hands you back an object where subcommands are methods, flags are kwargs, and calls can be validated before spawning.
 
 ```python
 import asyncio
@@ -44,7 +44,7 @@ Why it exists and how the whole thing works is covered in detail in [`notes.md`]
 - **Async-first** via `asyncio.create_subprocess_exec`, with a full **sync mirror** (`convert_sync`, `SyncCliApi`) for non-async users.
 - **Proxy-free Pythonic API** — just `__getattr__` + `__call__` on a regular class. No hidden traps, no parallel type file.
 - **Awaitable with `.text()`, `.lines()`, `.json()`** via a lazy-task `CommandFuture`. Works both `await api.x()` and `await api.x().text()` on the same call.
-- **Pre-spawn validation** with `difflib` did-you-mean suggestions (stdlib, no deps). Catches unknown flags, type mismatches, invalid choices, missing required flags, missing positionals, and mutually-exclusive conflicts.
+- **Pre-spawn validation** with `difflib` did-you-mean suggestions (stdlib, no deps). Catches unknown flags, type mismatches, invalid choices, missing required flags, and missing positionals.
 - **Streaming callbacks** (`on_stdout` / `on_stderr`) fire real-time per chunk in async mode, per-line in sync mode (post-completion). TTY-aware color forcing (`FORCE_COLOR` / `CLICOLOR_FORCE`) when streaming to a terminal.
 - **`stdio="inherit"`** for interactive subcommands that need to pass through the parent terminal.
 - **Per-call `RunConfig`** — `timeout`, `cwd`, `env` (merged with parent), `signal` (`asyncio.Event`-compatible cancellation).

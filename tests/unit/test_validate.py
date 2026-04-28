@@ -17,6 +17,14 @@ class TestUnknownFlag:
         errors = api.validate(yes=True, force=True)
         assert errors == []
 
+    def test_short_flag_alias_accepted(self):
+        schema = parse_help_text(
+            "foo",
+            "Usage: foo [options]\n\nOptions:\n  -v, --verbose  enable\n",
+        )
+        errors = validate_options(schema.command, {"v": True})
+        assert errors == []
+
     def test_completely_unknown_flag_no_suggestion(self):
         api = from_help_text_sync("grab", REACT_GRAB_INIT_HELP)
         errors = api.validate(totally_unrelated_flag=True)
@@ -116,3 +124,11 @@ class TestRequiredFlag:
         )
         errors = validate_options(schema.command, {})
         assert any(e.kind == "missing-required-flag" for e in errors)
+
+    def test_required_flag_can_be_satisfied_by_short_alias(self):
+        schema = parse_help_text(
+            "foo",
+            "Usage: foo [options]\n\nOptions:\n  -t, --token <t>  auth token (required)\n",
+        )
+        errors = validate_options(schema.command, {"t": "secret"})
+        assert errors == []

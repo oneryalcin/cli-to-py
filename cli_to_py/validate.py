@@ -34,7 +34,22 @@ class ValidationError:
 
 
 def _build_flag_lookup(flags: list[ParsedFlag]) -> dict[str, ParsedFlag]:
-    return {kebab_to_snake(f.long_name): f for f in flags}
+    lookup: dict[str, ParsedFlag] = {}
+    for flag in flags:
+        lookup[kebab_to_snake(flag.long_name)] = flag
+        lookup[f"--{flag.long_name}"] = flag
+        if flag.short_name:
+            lookup[flag.short_name.lstrip("-")] = flag
+            lookup[flag.short_name] = flag
+    return lookup
+
+
+def _option_keys_for_flag(flag: ParsedFlag) -> set[str]:
+    keys = {kebab_to_snake(flag.long_name), f"--{flag.long_name}"}
+    if flag.short_name:
+        keys.add(flag.short_name.lstrip("-"))
+        keys.add(flag.short_name)
+    return keys
 
 
 def _validate_flags(
@@ -85,11 +100,16 @@ def _validate_flags(
                         choices=list(flag.choices),
                     ))
 
+    checked_required: set[int] = set()
     for snake_name, flag in lookup.items():
-        if flag.is_required and snake_name not in options:
+        flag_id = id(flag)
+        if flag_id in checked_required:
+            continue
+        checked_required.add(flag_id)
+        if flag.is_required and not (_option_keys_for_flag(flag) & options.keys()):
             errors.append(ValidationError(
                 kind="missing-required-flag",
-                name=snake_name,
+                name=kebab_to_snake(flag.long_name),
                 message=f'Required flag "{snake_name}" (--{flag.long_name}) is missing.',
             ))
     return errors
