@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .case import kebab_to_snake
+from .case import kebab_to_snake, snake_to_kebab
 from .run_config import RunConfig
 from .schema import CliSchema, ParsedSubcommand
 
@@ -43,14 +43,24 @@ class _BaseCliApi:
     # --- resolution helpers
 
     def _resolve_alias(self, name: str) -> str:
+        normalized = snake_to_kebab(name)
         for sub in self.schema.command.subcommands:
-            if sub.name == name or (sub.aliases and name in sub.aliases):
+            if (
+                sub.name == name
+                or sub.name == normalized
+                or (sub.aliases and (name in sub.aliases or normalized in sub.aliases))
+            ):
                 return sub.name
         return name
 
     def _find_subcommand(self, name: str) -> ParsedSubcommand | None:
+        normalized = snake_to_kebab(name)
         for sub in self.schema.command.subcommands:
-            if sub.name == name or (sub.aliases and name in sub.aliases):
+            if (
+                sub.name == name
+                or sub.name == normalized
+                or (sub.aliases and (name in sub.aliases or normalized in sub.aliases))
+            ):
                 return sub
         return None
 

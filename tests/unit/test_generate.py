@@ -61,3 +61,26 @@ def test_wrapper_handles_hyphenated_names():
     ast.parse(code)
     # "do-stuff" → "do_stuff"
     assert "def do_stuff(" in code
+
+
+def test_wrapper_preserves_equals_flags():
+    help_text = "Usage: foo [options]\n\nOptions:\n  --config=<path>  config path\n"
+    schema = parse_help_text("foo", help_text)
+    code = generate_wrapper(schema)
+    namespace = {}
+    exec(code, namespace)
+    assert namespace["_to_args"]({"config": "settings.toml"}, {"config"}) == [
+        "--config=settings.toml"
+    ]
+
+
+def test_wrapper_avoids_identifier_collisions():
+    help_text = "Usage: foo [options]\n\nCommands:\n  foo-bar  first\n  foo_bar  second\n"
+    schema = parse_help_text("foo", help_text)
+    code = generate_wrapper(schema)
+    stub = generate_stub(schema)
+    ast.parse(code)
+    ast.parse(stub)
+    assert "def foo_bar(" in code
+    assert "def foo_bar_2(" in code
+    assert code.count("def foo_bar(") == 1

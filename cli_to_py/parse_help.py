@@ -191,14 +191,43 @@ def _parse_usage_positionals(line: str) -> list[ParsedPositionalArg]:
     args_str = match.group(2)
     result: list[ParsedPositionalArg] = []
     for m in _USAGE_POSITIONAL_RE.finditer(args_str):
+        if _is_option_value_placeholder(args_str, m.start(), m.end()):
+            continue
         full = m.group(0)
         is_required = full.startswith("<")
         name = m.group(2) or m.group(4)
         is_variadic = "..." in full
+        if not name or name.startswith("-"):
+            continue
         if name in ("options", "command", "cmd", "OPTIONS", "COMMAND"):
             continue
         result.append(ParsedPositionalArg(name=name, required=is_required, variadic=is_variadic))
     return result
+
+
+def _is_option_value_placeholder(args_str: str, start: int, end: int) -> bool:
+    """Return True when a usage placeholder is the value for a preceding flag."""
+    before = args_str[:start]
+    if before.rstrip().endswith("="):
+        return True
+
+    prev = re.search(r"(\S+)\s*$", before)
+    if prev:
+        prev_token = prev.group(1)
+        if not prev_token.endswith("]") and prev_token.lstrip("[").startswith("-"):
+            return True
+
+    left = args_str.rfind("[", 0, start)
+    if left == -1:
+        return False
+    previous_close = args_str.rfind("]", 0, start)
+    if previous_close > left:
+        return False
+    right = args_str.find("]", end)
+    if right == -1:
+        return False
+    prefix_in_group = args_str[left:start]
+    return bool(re.search(r"(^|[\s\[])-{1,2}[\w-]+(?:[=\s]|$)", prefix_in_group))
 
 
 def parse_help_text(binary_name: str, help_text: str) -> CliSchema:

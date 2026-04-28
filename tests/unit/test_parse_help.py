@@ -81,6 +81,19 @@ class TestReactDoctor:
         assert schema.command.positional_args[0].name == "directory"
         assert schema.command.positional_args[0].required is False
 
+    def test_option_value_placeholders_are_not_positionals(self):
+        schema = parse_help_text(
+            "tool",
+            "Usage: tool [--output <file>] [--config=<path>] <input> [dest]\n\n"
+            "Options:\n"
+            "  --output <file>  output file\n"
+            "  --config=<path>  config path\n",
+        )
+        assert [(p.name, p.required) for p in schema.command.positional_args] == [
+            ("input", True),
+            ("dest", False),
+        ]
+
 
 class TestClapStyle:
     def test_parses_clap_style_sections(self):
