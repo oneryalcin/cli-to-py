@@ -21,7 +21,7 @@ from .command_string import to_command_string
 from .parse_subcommands import parse_subcommand_help_sync
 from .schema import CommandResult, ParsedCommand, ParsedSubcommand
 from .sync_exec import run_command_sync
-from .validate import ValidationError, validate_options
+from .validate import ValidationError, validate_global_options, validate_options
 
 
 class SyncCliApi(_BaseCliApi):
@@ -30,17 +30,17 @@ class SyncCliApi(_BaseCliApi):
     def __call__(
         self, subcommand: str | None = None, /, **kwargs: Any
     ) -> CommandResult:
-        options, per_call = self._split_kwargs(kwargs)
+        options, global_opts, per_call = self._split_kwargs(kwargs)
         if subcommand is not None:
             resolved = self._resolve_alias(subcommand)
             equals = self._equals_for(resolved)
             return run_command_sync(
                 self.binary_name, [resolved], options,
-                self._merged_config(per_call), equals,
+                self._merged_config(per_call), equals, global_opts,
             )
         return run_command_sync(
             self.binary_name, [], options,
-            self._merged_config(per_call), self._equals_flags,
+            self._merged_config(per_call), self._equals_flags, global_opts,
         )
 
     def __getattr__(self, name: str) -> Any:
@@ -55,10 +55,10 @@ class SyncCliApi(_BaseCliApi):
         equals = self._equals_for(resolved)
 
         def dispatch(**kwargs: Any) -> CommandResult:
-            options, per_call = self._split_kwargs(kwargs)
+            options, global_opts, per_call = self._split_kwargs(kwargs)
             return run_command_sync(
                 self.binary_name, [resolved], options,
-                self._merged_config(per_call), equals,
+                self._merged_config(per_call), equals, global_opts,
             )
         dispatch.__name__ = name
         return dispatch
@@ -73,8 +73,13 @@ class SyncCliApi(_BaseCliApi):
     def validate(
         self, subcommand: str | None = None, /, **options: Any
     ) -> list[ValidationError]:
+        global_opts = options.pop("_global", None)
+        global_errors = (
+            validate_global_options(self.schema.command, global_opts)
+            if isinstance(global_opts, dict) else []
+        )
         if subcommand is None:
-            return validate_options(self.schema.command, options)
+            return [*global_errors, *validate_options(self.schema.command, options)]
         sub = self._find_subcommand(subcommand)
         if sub is None:
             raise ValueError(
@@ -91,14 +96,17 @@ class SyncCliApi(_BaseCliApi):
             flags=sub.flags,
             positional_args=sub.positional_args or [],
         )
-        return validate_options(fake_command, options)
+        return [*global_errors, *validate_options(fake_command, options)]
 
-    def command_string(self, subcommand: str | None = None, /, **options: Any) -> str:
+    def command_string(self, subcommand: str | None = None, /, **kwargs: Any) -> str:
+        options, global_opts, _per_call = self._split_kwargs(kwargs)
         if subcommand is None:
-            return to_command_string(self.binary_name, [], options, self._equals_flags)
+            return to_command_string(
+                self.binary_name, [], options, self._equals_flags, global_opts
+            )
         resolved = self._resolve_alias(subcommand)
         return to_command_string(
-            self.binary_name, [resolved], options, self._equals_for(resolved)
+            self.binary_name, [resolved], options, self._equals_for(resolved), global_opts
         )
 
     def parse_sync(

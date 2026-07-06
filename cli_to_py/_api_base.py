@@ -73,8 +73,12 @@ class _BaseCliApi:
 
     def _split_kwargs(
         self, kwargs: dict[str, Any]
-    ) -> tuple[dict[str, Any], RunConfig | None]:
-        """Extract an optional `_config` kwarg (a RunConfig) from user options.
+    ) -> tuple[dict[str, Any], dict[str, Any] | None, RunConfig | None]:
+        """Extract the reserved `_config` and `_global` kwargs from user options.
+
+        `_global` is a dict of options rendered BEFORE the subcommand
+        (`git -C /path log`, `docker --context x ps`) — many CLIs reject
+        global flags placed after the subcommand.
 
         Also guards against the common typo where a user passes
         `config=RunConfig(...)` instead of `_config=RunConfig(...)` — without
@@ -84,13 +88,21 @@ class _BaseCliApi:
         config = kwargs.pop("_config", None)
         if config is not None and not isinstance(config, RunConfig):
             raise TypeError("_config must be a RunConfig instance")
+        global_options = kwargs.pop("_global", None)
+        if global_options is not None:
+            if not isinstance(global_options, dict):
+                raise TypeError("_global must be a dict of pre-subcommand options")
+            if "_" in global_options:
+                raise TypeError(
+                    "_global cannot contain '_' — positionals belong after the subcommand"
+                )
         # Stray RunConfig values under non-underscore keys are almost always typos.
         for key, value in kwargs.items():
             if isinstance(value, RunConfig):
                 raise TypeError(
                     f"kwarg {key!r} holds a RunConfig — did you mean `_config=...`?"
                 )
-        return kwargs, config
+        return kwargs, global_options, config
 
     def _merged_config(self, per_call: RunConfig | None) -> RunConfig:
         return self._default_config.merge(per_call)

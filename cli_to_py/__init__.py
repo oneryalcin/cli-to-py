@@ -51,7 +51,7 @@ from .schema import (
 from .script import Script, script
 from .sync_api import SyncCliApi
 from .sync_exec import run_command_sync, run_for_help_sync
-from .validate import ValidationError, validate_options
+from .validate import ValidationError, validate_global_options, validate_options
 
 __version__ = "0.1.0"
 
@@ -80,6 +80,7 @@ __all__ = [
     # config
     "RunConfig",
     # validation
+    "validate_global_options",
     "validate_options",
     "ValidationError",
     # execution

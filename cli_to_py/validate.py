@@ -53,7 +53,9 @@ def _option_keys_for_flag(flag: ParsedFlag) -> set[str]:
 
 
 def _validate_flags(
-    options: dict[str, Any], lookup: dict[str, ParsedFlag]
+    options: dict[str, Any],
+    lookup: dict[str, ParsedFlag],
+    check_required: bool = True,
 ) -> list[ValidationError]:
     errors: list[ValidationError] = []
     known = list(lookup.keys())
@@ -99,6 +101,9 @@ def _validate_flags(
                         message=f'Flag "{key}" received "{single}" but must be one of: {", ".join(flag.choices)}.',
                         choices=list(flag.choices),
                     ))
+
+    if not check_required:
+        return errors
 
     checked_required: set[int] = set()
     for snake_name, flag in lookup.items():
@@ -147,3 +152,15 @@ def validate_options(command: ParsedCommand, options: dict[str, Any]) -> list[Va
         *_validate_flags(options, lookup),
         *_validate_positionals(options, command),
     ]
+
+
+def validate_global_options(
+    command: ParsedCommand, options: dict[str, Any]
+) -> list[ValidationError]:
+    """Validate a `_global` (pre-subcommand) options dict against the root command.
+
+    Only per-key checks run — required-flag and positional checks don't apply
+    to a partial dict of global options.
+    """
+    lookup = _build_flag_lookup(command.flags)
+    return _validate_flags(options, lookup, check_required=False)

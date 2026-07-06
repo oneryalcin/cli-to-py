@@ -63,6 +63,14 @@ await git("diff", name_only=True, _=["HEAD~1"])
 # runs: git diff --name-only HEAD~1
 ```
 
+Use `_global` for options that must come **before** the subcommand
+(`git -C`, `docker --context`, `kubectl --namespace`):
+
+```python
+await git("log", _global={"C": "/path/to/repo"}, max_count=15)
+# runs: git -C /path/to/repo log --max-count 15
+```
+
 ## Why It Exists
 
 Traditional tool calling makes agents call tools one step at a time. That is

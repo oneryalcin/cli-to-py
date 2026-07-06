@@ -26,3 +26,20 @@ await api(**{"--experimental-flag": True, "_": ["value"]})
 ```
 
 Or bypass validation for a command and let the underlying CLI decide.
+
+## Global (Pre-Subcommand) Options
+
+Regular kwargs render after the subcommand. Options that a CLI requires
+**before** the subcommand — `git -C <path>`, `docker --context`,
+`kubectl --namespace`, `terraform -chdir` — go in the reserved `_global`
+dict:
+
+```python
+await git("log", _global={"C": "/path/to/repo"}, max_count=15)
+# runs: git -C /path/to/repo log --max-count 15
+```
+
+`_global` uses the same rendering rules as regular kwargs (short flags,
+kebab-casing, booleans, lists, raw dash-prefixed keys) and works with
+`__call__`, dot dispatch, `spawn`, `command_string`, and `validate` on both
+the async and sync APIs. Positionals (`_`) are not allowed inside it.
