@@ -213,6 +213,103 @@ class TestGlobalOptions:
             for e in errors
         )
 
+def _nested_echo_api(sync: bool = False):
+    """API over `echo` with a hand-attached nested tree: pip -> install|add.
+
+    Using echo as the binary lets dispatch tests observe the exact argv the
+    library produced (echo prints its args) without depending on a real
+    nested CLI being installed.
+    """
+    from cli_to_py import parse_help_text
+    from cli_to_py.schema import ParsedSubcommand
+
+    root_help = (
+        "Usage: echo [options] <command>\n\n"
+        "Options:\n  -q, --quiet  quiet\n\n"
+        "Commands:\n  pip  package ops\n"
+    )
+    install_flags = parse_help_text(
+        "install",
+        "Usage: echo pip install [options]\n\n"
+        "Options:\n  --index-url=<url>  idx\n  -U, --upgrade  up\n",
+    ).command.flags
+    api = (from_help_text_sync if sync else from_help_text)("echo", root_help)
+    api.schema.command.subcommands[0].subcommands = [
+        ParsedSubcommand(name="install", aliases=["add"], description="", flags=install_flags)
+    ]
+    return api
+
+
+class TestNestedDispatch:
+    """Issue #3: fluent nested subcommand dispatch — api.pip.install(...)."""
+
+    async def test_dot_chain_dispatches_full_path(self):
+        api = _nested_echo_api()
+        result = await api.pip.install(upgrade=True, _=["httpx"])
+        assert result.text() == "pip install --upgrade httpx"
+
+    async def test_nested_alias_resolves(self):
+        api = _nested_echo_api()
+        result = await api.pip.add(upgrade=True)
+        assert result.text() == "pip install --upgrade"
+
+    async def test_call_accepts_space_separated_path(self):
+        api = _nested_echo_api()
+        result = await api("pip install", upgrade=True)
+        assert result.text() == "pip install --upgrade"
+
+    async def test_intermediate_proxy_is_callable(self):
+        api = _nested_echo_api()
+        result = await api.pip(quiet=True)
+        assert result.text() == "pip --quiet"
+
+    def test_sync_dot_chain(self):
+        api = _nested_echo_api(sync=True)
+        assert api.pip.install(upgrade=True).text() == "pip install --upgrade"
+
+    def test_command_string_nested_with_alias_and_equals(self):
+        # nested-level equals policy applies after the subcommand; _global
+        # renders before the whole chain with root policy
+        api = _nested_echo_api()
+        cmd = api.command_string("pip add", index_url="https://x", _global={"q": True})
+        assert cmd == "echo -q pip install --index-url=https://x"
+
+    def test_unknown_path_segments_pass_through(self):
+        # undocumented nested subcommands stay dispatchable via the call form
+        api = _nested_echo_api()
+        assert api.command_string("pip download", quiet=True) == "echo pip download --quiet"
+
+    def test_unknown_nested_attr_raises_with_hint(self):
+        api = _nested_echo_api()
+        import pytest
+        with pytest.raises(AttributeError, match="pip nonexistent"):
+            api.pip.nonexistent
+
+    def test_validate_nested_flags_typo(self):
+        api = _nested_echo_api()
+        errors = api.validate("pip install", upgrde=True)
+        assert any(
+            e.kind == "unknown-flag" and e.suggestion == "upgrade" for e in errors
+        )
+
+    def test_validate_nested_accepts_known_flag(self):
+        api = _nested_echo_api()
+        assert api.validate("pip install", upgrade=True) == []
+
+    def test_validate_unknown_nested_path_raises(self):
+        api = _nested_echo_api()
+        import pytest
+        with pytest.raises(ValueError, match="pip nope"):
+            api.validate("pip nope", x=True)
+
+    def test_proxy_dir_and_hasattr(self):
+        api = _nested_echo_api()
+        assert "install" in dir(api.pip)
+        assert "add" in dir(api.pip)
+        assert hasattr(api.pip, "install")
+        assert not hasattr(api.pip, "remove")
+
+
 class TestCommandResultHelpers:
     """text()/lines()/json() live directly on CommandResult now."""
 

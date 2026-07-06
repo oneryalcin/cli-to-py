@@ -71,6 +71,15 @@ await git("log", _global={"C": "/path/to/repo"}, max_count=15)
 # runs: git -C /path/to/repo log --max-count 15
 ```
 
+Nested command trees dispatch fluently, or as a space-separated string:
+
+```python
+uv = await convert("uv")
+await uv.pip.install(upgrade=True, _=["httpx"])
+# runs: uv pip install --upgrade httpx
+await uv("pip install", upgrade=True, _=["httpx"])   # equivalent
+```
+
 ## Why It Exists
 
 Traditional tool calling makes agents call tools one step at a time. That is

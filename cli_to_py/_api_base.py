@@ -14,6 +14,60 @@ from .run_config import RunConfig
 from .schema import CliSchema, ParsedSubcommand
 
 
+def _match_subcommand(
+    subs: list[ParsedSubcommand] | None, name: str
+) -> ParsedSubcommand | None:
+    """Find a subcommand in `subs` by name, kebab-cased name, or alias."""
+    normalized = snake_to_kebab(name)
+    for sub in subs or []:
+        if (
+            sub.name == name
+            or sub.name == normalized
+            or (sub.aliases and (name in sub.aliases or normalized in sub.aliases))
+        ):
+            return sub
+    return None
+
+
+class _SubcommandProxy:
+    """Callable handle for a subcommand path — `api.pip` / `api.pip.install`.
+
+    Calling it dispatches the accumulated path; attribute access descends
+    into nested subcommands parsed from `--help` enrichment.
+    """
+
+    def __init__(self, api: "_BaseCliApi", path: list[str], node: ParsedSubcommand):
+        self._api = api
+        self._path = path
+        self._node = node
+
+    def __call__(self, **kwargs: Any) -> Any:
+        return self._api._dispatch(self._path, kwargs)
+
+    def __getattr__(self, name: str) -> "_SubcommandProxy":
+        if name.startswith("_"):
+            raise AttributeError(name)
+        child = _match_subcommand(self._node.subcommands, name)
+        if child is None:
+            joined = " ".join(self._path)
+            raise AttributeError(
+                f"{joined!r} has no nested subcommand {name!r}. "
+                f"Use api({joined + ' ' + name!r}, ...) if your CLI exposes it "
+                f"but --help didn't list it."
+            )
+        return _SubcommandProxy(self._api, [*self._path, child.name], child)
+
+    def __dir__(self) -> list[str]:
+        names = set(super().__dir__())
+        for sub in self._node.subcommands or []:
+            names.add(sub.name)
+            names.update(sub.aliases or ())
+        return sorted(names)
+
+    def __repr__(self) -> str:
+        return f"<{self._api.binary_name} {' '.join(self._path)} dispatcher>"
+
+
 class _BaseCliApi:
     """Base class holding dispatch/resolution plumbing shared by CliApi and SyncCliApi.
 
@@ -42,34 +96,56 @@ class _BaseCliApi:
 
     # --- resolution helpers
 
+    def _dispatch(self, subs: list[str], kwargs: dict[str, Any]) -> Any:
+        raise NotImplementedError  # CliApi / SyncCliApi own the run semantics
+
     def _resolve_alias(self, name: str) -> str:
-        normalized = snake_to_kebab(name)
-        for sub in self.schema.command.subcommands:
-            if (
-                sub.name == name
-                or sub.name == normalized
-                or (sub.aliases and (name in sub.aliases or normalized in sub.aliases))
-            ):
-                return sub.name
-        return name
+        sub = self._find_subcommand(name)
+        return sub.name if sub is not None else name
 
     def _find_subcommand(self, name: str) -> ParsedSubcommand | None:
-        normalized = snake_to_kebab(name)
-        for sub in self.schema.command.subcommands:
-            if (
-                sub.name == name
-                or sub.name == normalized
-                or (sub.aliases and (name in sub.aliases or normalized in sub.aliases))
-            ):
-                return sub
-        return None
+        return _match_subcommand(self.schema.command.subcommands, name)
+
+    def _resolve_path(self, spec: str) -> list[str]:
+        """Resolve a space-separated subcommand spec ('pip install') level by
+        level. Segments the schema doesn't know pass through unchanged so
+        undocumented subcommands stay dispatchable."""
+        resolved: list[str] = []
+        subs = self.schema.command.subcommands
+        for part in spec.split():
+            node = _match_subcommand(subs, part)
+            if node is None:
+                resolved.append(part)
+                subs = None
+            else:
+                resolved.append(node.name)
+                subs = node.subcommands
+        return resolved
+
+    def _find_path_node(self, spec: str) -> ParsedSubcommand | None:
+        node: ParsedSubcommand | None = None
+        subs = self.schema.command.subcommands
+        for part in spec.split():
+            node = _match_subcommand(subs, part)
+            if node is None:
+                return None
+            subs = node.subcommands
+        return node
+
+    def _equals_for_path(self, path: list[str]) -> set[str]:
+        equals = set(self._equals_flags)
+        subs = self.schema.command.subcommands
+        for part in path:
+            node = _match_subcommand(subs, part)
+            if node is None:
+                break
+            if node.flags:
+                equals |= {kebab_to_snake(f.long_name) for f in node.flags if f.uses_equals}
+            subs = node.subcommands
+        return equals
 
     def _equals_for(self, resolved_sub: str) -> set[str]:
-        sub = self._find_subcommand(resolved_sub)
-        if sub is None or not sub.flags:
-            return self._equals_flags
-        sub_equals = {kebab_to_snake(f.long_name) for f in sub.flags if f.uses_equals}
-        return self._equals_flags | sub_equals
+        return self._equals_for_path([resolved_sub])
 
     def _split_kwargs(
         self, kwargs: dict[str, Any]

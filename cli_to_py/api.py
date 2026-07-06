@@ -12,6 +12,8 @@ Usage:
     await api.status(short=True)
     await api("diff", name_only=True, _=["HEAD~1"])
     await api.branch(show_current=True).text()
+    await api.remote.add(_=["origin", url])          # nested: git remote add
+    await api("remote add", _=["origin", url])       # equivalent string form
 
     api.schema                                       # parsed schema
     api.validate("commit", massage="x")              # typo catcher
@@ -29,7 +31,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._api_base import _BaseCliApi
+from ._api_base import _BaseCliApi, _SubcommandProxy
 from .command_future import CommandFuture
 from .command_string import to_command_string
 from .exec import CommandProcess, run_command, spawn_command
@@ -41,44 +43,30 @@ from .validate import ValidationError, validate_global_options, validate_options
 class CliApi(_BaseCliApi):
     """Async, callable Pythonic wrapper around a CLI binary."""
 
-    def __call__(self, subcommand: str | None = None, /, **kwargs: Any) -> CommandFuture:
+    def _dispatch(self, subs: list[str], kwargs: dict[str, Any]) -> CommandFuture:
         options, global_opts, per_call = self._split_kwargs(kwargs)
-        if subcommand is not None:
-            resolved = self._resolve_alias(subcommand)
-            equals = self._equals_for(resolved)
-            return CommandFuture(run_command(
-                self.binary_name, [resolved], options,
-                self._merged_config(per_call), equals, global_opts,
-                self._equals_flags,
-            ))
         return CommandFuture(run_command(
-            self.binary_name, [], options,
-            self._merged_config(per_call), self._equals_flags, global_opts,
+            self.binary_name, subs, options,
+            self._merged_config(per_call), self._equals_for_path(subs), global_opts,
             self._equals_flags,
         ))
 
-    def __getattr__(self, name: str) -> Any:
+    def __call__(self, subcommand: str | None = None, /, **kwargs: Any) -> CommandFuture:
+        subs = self._resolve_path(subcommand) if subcommand else []
+        return self._dispatch(subs, kwargs)
+
+    def __getattr__(self, name: str) -> _SubcommandProxy:
         # Only called if normal attribute lookup fails — so class methods
         # like `validate`, `spawn`, `command_string`, `parse` still win.
         if name.startswith("_"):
             raise AttributeError(name)
-        if self._find_subcommand(name) is None:
+        node = self._find_subcommand(name)
+        if node is None:
             raise AttributeError(
                 f"{type(self).__name__!s} has no subcommand {name!r}. "
                 f"Use api({name!r}, ...) if your CLI exposes it but --help didn't list it."
             )
-        resolved = self._resolve_alias(name)
-        equals = self._equals_for(resolved)
-
-        def dispatch(**kwargs: Any) -> CommandFuture:
-            options, global_opts, per_call = self._split_kwargs(kwargs)
-            return CommandFuture(run_command(
-                self.binary_name, [resolved], options,
-                self._merged_config(per_call), equals, global_opts,
-                self._equals_flags,
-            ))
-        dispatch.__name__ = name
-        return dispatch
+        return _SubcommandProxy(self, [node.name], node)
 
     def __dir__(self) -> list[str]:
         """Expose known subcommands + helper methods for IDEs / dir()."""
@@ -100,7 +88,7 @@ class CliApi(_BaseCliApi):
         )
         if subcommand is None:
             return [*global_errors, *validate_options(self.schema.command, options)]
-        sub = self._find_subcommand(subcommand)
+        sub = self._find_path_node(subcommand)
         if sub is None:
             raise ValueError(
                 f'Unknown subcommand "{subcommand}". Pass subcommands=True to convert().'
@@ -120,14 +108,9 @@ class CliApi(_BaseCliApi):
 
     def command_string(self, subcommand: str | None = None, /, **kwargs: Any) -> str:
         options, global_opts, _per_call = self._split_kwargs(kwargs)
-        if subcommand is None:
-            return to_command_string(
-                self.binary_name, [], options, self._equals_flags, global_opts,
-                self._equals_flags,
-            )
-        resolved = self._resolve_alias(subcommand)
+        subs = self._resolve_path(subcommand) if subcommand else []
         return to_command_string(
-            self.binary_name, [resolved], options, self._equals_for(resolved),
+            self.binary_name, subs, options, self._equals_for_path(subs),
             global_opts, self._equals_flags,
         )
 
@@ -135,11 +118,10 @@ class CliApi(_BaseCliApi):
         self, subcommand: str | None = None, /, **kwargs: Any
     ) -> CommandProcess:
         options, global_opts, per_call = self._split_kwargs(kwargs)
-        subs = [self._resolve_alias(subcommand)] if subcommand else []
-        equals = self._equals_for(subs[0]) if subs else self._equals_flags
+        subs = self._resolve_path(subcommand) if subcommand else []
         return await spawn_command(
             self.binary_name, subs, options,
-            self._merged_config(per_call), equals, global_opts,
+            self._merged_config(per_call), self._equals_for_path(subs), global_opts,
             self._equals_flags,
         )
 

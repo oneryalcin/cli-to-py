@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ._api_base import _BaseCliApi
+from ._api_base import _BaseCliApi, _SubcommandProxy
 from .command_string import to_command_string
 from .parse_subcommands import parse_subcommand_help_sync
 from .schema import CommandResult, ParsedCommand, ParsedSubcommand
@@ -27,44 +27,30 @@ from .validate import ValidationError, validate_global_options, validate_options
 class SyncCliApi(_BaseCliApi):
     """Sync, callable Pythonic wrapper around a CLI binary."""
 
-    def __call__(
-        self, subcommand: str | None = None, /, **kwargs: Any
-    ) -> CommandResult:
+    def _dispatch(self, subs: list[str], kwargs: dict[str, Any]) -> CommandResult:
         options, global_opts, per_call = self._split_kwargs(kwargs)
-        if subcommand is not None:
-            resolved = self._resolve_alias(subcommand)
-            equals = self._equals_for(resolved)
-            return run_command_sync(
-                self.binary_name, [resolved], options,
-                self._merged_config(per_call), equals, global_opts,
-                self._equals_flags,
-            )
         return run_command_sync(
-            self.binary_name, [], options,
-            self._merged_config(per_call), self._equals_flags, global_opts,
+            self.binary_name, subs, options,
+            self._merged_config(per_call), self._equals_for_path(subs), global_opts,
             self._equals_flags,
         )
 
-    def __getattr__(self, name: str) -> Any:
+    def __call__(
+        self, subcommand: str | None = None, /, **kwargs: Any
+    ) -> CommandResult:
+        subs = self._resolve_path(subcommand) if subcommand else []
+        return self._dispatch(subs, kwargs)
+
+    def __getattr__(self, name: str) -> _SubcommandProxy:
         if name.startswith("_"):
             raise AttributeError(name)
-        if self._find_subcommand(name) is None:
+        node = self._find_subcommand(name)
+        if node is None:
             raise AttributeError(
                 f"{type(self).__name__!s} has no subcommand {name!r}. "
                 f"Use api({name!r}, ...) if your CLI exposes it but --help didn't list it."
             )
-        resolved = self._resolve_alias(name)
-        equals = self._equals_for(resolved)
-
-        def dispatch(**kwargs: Any) -> CommandResult:
-            options, global_opts, per_call = self._split_kwargs(kwargs)
-            return run_command_sync(
-                self.binary_name, [resolved], options,
-                self._merged_config(per_call), equals, global_opts,
-                self._equals_flags,
-            )
-        dispatch.__name__ = name
-        return dispatch
+        return _SubcommandProxy(self, [node.name], node)
 
     def __dir__(self) -> list[str]:
         base = set(super().__dir__())
@@ -85,7 +71,7 @@ class SyncCliApi(_BaseCliApi):
         )
         if subcommand is None:
             return [*global_errors, *validate_options(self.schema.command, options)]
-        sub = self._find_subcommand(subcommand)
+        sub = self._find_path_node(subcommand)
         if sub is None:
             raise ValueError(
                 f'Unknown subcommand "{subcommand}". Pass subcommands=True to convert_sync().'
@@ -105,14 +91,9 @@ class SyncCliApi(_BaseCliApi):
 
     def command_string(self, subcommand: str | None = None, /, **kwargs: Any) -> str:
         options, global_opts, _per_call = self._split_kwargs(kwargs)
-        if subcommand is None:
-            return to_command_string(
-                self.binary_name, [], options, self._equals_flags, global_opts,
-                self._equals_flags,
-            )
-        resolved = self._resolve_alias(subcommand)
+        subs = self._resolve_path(subcommand) if subcommand else []
         return to_command_string(
-            self.binary_name, [resolved], options, self._equals_for(resolved),
+            self.binary_name, subs, options, self._equals_for_path(subs),
             global_opts, self._equals_flags,
         )
 
