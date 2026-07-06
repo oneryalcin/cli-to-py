@@ -117,6 +117,16 @@ class TestUvEnrichment:
         assert len(unknown) >= 1
         assert unknown[0].suggestion == "editable"
 
+    async def test_nested_dispatch_on_enriched_tree(self):
+        # Issue #3: enrichment discovers nested subcommands (uv cache dir)
+        # and the fluent chain dispatches them.
+        api = await convert("uv", subcommands=True)
+        cache = next(s for s in api.schema.command.subcommands if s.name == "cache")
+        assert cache.subcommands, "enrichment should discover nested subcommands"
+        result = await api.cache.dir()
+        assert result.exit_code == 0
+        assert result.text()
+
     async def test_nested_subcommand_enriched_recursively(self):
         """Regression: nested subcommands (uv pip install) must get their
         own flags enriched, not just the top level."""

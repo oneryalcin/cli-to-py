@@ -16,7 +16,9 @@ Most CLIs expose help as plain text, not as structured metadata. `cli-to-py` han
 
 - Undocumented flags cannot be validated.
 - Dynamic flags may not appear in help output.
-- Deep nested command trees are parsed into the schema, but runtime dispatch is currently one-level.
+- Nested command trees are enriched three levels deep by default; fluent dot
+  dispatch (`api.pip.install(...)`) follows the parsed tree, and the string
+  form (`api("pip install", ...)`) passes unknown segments through verbatim.
 - Some CLIs use custom help layouts that may parse only partially.
 
 Use raw dash-prefixed keys as an escape hatch when needed:
