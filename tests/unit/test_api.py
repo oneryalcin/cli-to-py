@@ -309,6 +309,109 @@ class TestNestedDispatch:
         assert hasattr(api.pip, "install")
         assert not hasattr(api.pip, "remove")
 
+    def test_proxy_exposes_dunder_name(self):
+        # the pre-proxy closure dispatchers had __name__; keep the contract
+        api = _nested_echo_api()
+        assert api.pip.__name__ == "pip"
+        assert api.pip.install.__name__ == "install"
+
+    def test_validate_unknown_nested_leaf_message_is_accurate(self):
+        # known parent + unknown leaf: the path IS dispatchable, so the error
+        # must say so instead of blaming subcommands=True
+        api = _nested_echo_api()
+        import pytest
+        with pytest.raises(ValueError, match='not a parsed subcommand of "pip"'):
+            api.validate("pip download", quiet=True)
+
+    def test_empty_spec_treated_as_root_everywhere(self):
+        api = _nested_echo_api()
+        assert api.command_string("") == "echo"
+        assert api.validate("   ") == api.validate()
+
+
+class TestLazyNestedParse:
+    """parse()/parse_sync() must honor the same space-separated path
+    convention as every other entry point (review finding on issue #3)."""
+
+    @staticmethod
+    def _bare_pip_api(sync: bool = False):
+        root_help = "Usage: tool [options]\n\nCommands:\n  pip  package ops\n"
+        return (from_help_text_sync if sync else from_help_text)("tool", root_help)
+
+    @staticmethod
+    def _fake_parsed(name: str, subcommands=None):
+        from cli_to_py import parse_help_text
+        from cli_to_py.schema import ParsedCommand
+
+        flags = parse_help_text(
+            name, f"Usage: tool {name} [options]\n\nOptions:\n  -U, --upgrade  up\n"
+        ).command.flags
+        return ParsedCommand(
+            name=name, description="", flags=flags,
+            positional_args=[], subcommands=subcommands or [],
+        )
+
+    async def test_parse_splits_path_and_attaches_nested_node(self, monkeypatch):
+        api = self._bare_pip_api()
+        calls = []
+
+        async def fake(binary, path, **kw):
+            calls.append(path)
+            return self._fake_parsed(path[-1])
+
+        monkeypatch.setattr("cli_to_py.api.parse_subcommand_help", fake)
+        await api.parse("pip install")
+        assert calls == [["pip", "install"]]
+        pip = api.schema.command.subcommands[0]
+        assert pip.subcommands and pip.subcommands[0].name == "install"
+        # no phantom top-level node named "pip install"
+        assert all(" " not in s.name for s in api.schema.command.subcommands)
+        # the lazily attached node powers fluent dispatch and validation
+        assert api.command_string("pip install", upgrade=True) == "tool pip install --upgrade"
+        assert api.validate("pip install", upgrade=True) == []
+
+    async def test_parse_single_segment_keeps_discovered_children(self, monkeypatch):
+        from cli_to_py.schema import ParsedSubcommand
+        api = self._bare_pip_api()
+
+        async def fake(binary, path, **kw):
+            return self._fake_parsed(
+                "pip", subcommands=[ParsedSubcommand(name="install", aliases=[], description="")]
+            )
+
+        monkeypatch.setattr("cli_to_py.api.parse_subcommand_help", fake)
+        await api.parse("pip")
+        pip = api.schema.command.subcommands[0]
+        assert pip.subcommands and pip.subcommands[0].name == "install"
+
+    async def test_parse_creates_missing_intermediates(self, monkeypatch):
+        # subcommands=False recovery: root help never mentioned the parent
+        api = from_help_text("tool", "Usage: tool [options]\n")
+
+        async def fake(binary, path, **kw):
+            return self._fake_parsed(path[-1])
+
+        monkeypatch.setattr("cli_to_py.api.parse_subcommand_help", fake)
+        await api.parse("remote add")
+        remote = api.schema.command.subcommands[0]
+        assert remote.name == "remote"
+        assert remote.flags is None  # intermediate is unenriched, not fabricated
+        assert remote.subcommands[0].name == "add"
+
+    def test_parse_sync_splits_path_and_attaches(self, monkeypatch):
+        api = self._bare_pip_api(sync=True)
+        calls = []
+
+        def fake(binary, path, **kw):
+            calls.append(path)
+            return self._fake_parsed(path[-1])
+
+        monkeypatch.setattr("cli_to_py.sync_api.parse_subcommand_help_sync", fake)
+        api.parse_sync("pip install")
+        assert calls == [["pip", "install"]]
+        pip = api.schema.command.subcommands[0]
+        assert pip.subcommands and pip.subcommands[0].name == "install"
+
 
 class TestCommandResultHelpers:
     """text()/lines()/json() live directly on CommandResult now."""

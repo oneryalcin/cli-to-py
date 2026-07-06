@@ -64,6 +64,10 @@ class _SubcommandProxy:
             names.update(sub.aliases or ())
         return sorted(names)
 
+    @property
+    def __name__(self) -> str:
+        return self._path[-1]
+
     def __repr__(self) -> str:
         return f"<{self._api.binary_name} {' '.join(self._path)} dispatcher>"
 
@@ -146,6 +150,53 @@ class _BaseCliApi:
 
     def _equals_for(self, resolved_sub: str) -> set[str]:
         return self._equals_for_path([resolved_sub])
+
+    def _attach_parsed(self, path: list[str], parsed: Any) -> None:
+        """Write lazily parsed help data back into the schema at `path`.
+
+        Missing segments are created along the way (flags=None, i.e.
+        unenriched) so `parse("remote add")` works even when the root help
+        never mentioned `remote` — the subcommands=False recovery path.
+        """
+        siblings = self.schema.command.subcommands
+        for part in path[:-1]:
+            node = _match_subcommand(siblings, part)
+            if node is None:
+                node = ParsedSubcommand(name=part, aliases=[], description="")
+                siblings.append(node)
+            if node.subcommands is None:
+                node.subcommands = []
+            siblings = node.subcommands
+        leaf = _match_subcommand(siblings, path[-1])
+        if leaf is None:
+            leaf = ParsedSubcommand(
+                name=path[-1], aliases=[], description=parsed.description,
+            )
+            siblings.append(leaf)
+        leaf.flags = parsed.flags
+        leaf.positional_args = parsed.positional_args
+        if parsed.subcommands:
+            leaf.subcommands = parsed.subcommands
+
+    def _unknown_path_message(self, spec: str, convert_call: str, parse_call: str) -> str:
+        """Accurate error for a spec _find_path_node couldn't resolve: says
+        which segment is unknown and that the call form can still dispatch it."""
+        known: list[str] = []
+        subs = self.schema.command.subcommands
+        for part in spec.split():
+            node = _match_subcommand(subs, part)
+            if node is None:
+                if known:
+                    return (
+                        f'"{part}" is not a parsed subcommand of "{" ".join(known)}". '
+                        f"api({spec!r}, ...) can still dispatch it; validation only "
+                        f"covers subcommands found in --help. "
+                        f'Call {parse_call}("{spec}") to enrich it.'
+                    )
+                break
+            known.append(node.name)
+            subs = node.subcommands
+        return f'Unknown subcommand "{spec}". Pass subcommands=True to {convert_call}.'
 
     def _split_kwargs(
         self, kwargs: dict[str, Any]
