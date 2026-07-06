@@ -16,6 +16,7 @@
 | `spawn_command` | Low-level streaming spawn. |
 | `parse_help_text` | Pure help text parser. |
 | `validate_options` | Pure validator for parsed commands. |
+| `validate_global_options` | Validator for `_global` (pre-subcommand) option dicts. |
 | `options_to_args` | Convert kwargs to CLI argv. |
 | `to_command_string` | Render a shell-safe command string. |
 | `script` | Compose shell command chains. |

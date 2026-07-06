@@ -108,6 +108,7 @@ from typing import Any, Sequence
 
 
 BINARY: str = {binary!r}
+GLOBAL_EQUALS: set[str] = {global_equals}
 
 
 @dataclass
@@ -159,13 +160,42 @@ def _to_args(options: dict, equals_flags: set[str] | None = None) -> list[str]:
     return flag_args + positional_args
 
 
+def _pop_global(options: dict) -> dict:
+    """Extract the reserved `_global` dict — options rendered BEFORE the
+    subcommand (git -C /path log, docker --context x ps)."""
+    global_options = options.pop("_global", None)
+    if global_options is None:
+        return {{}}
+    if not isinstance(global_options, dict):
+        raise TypeError("_global must be a dict of pre-subcommand options")
+    if "_" in global_options:
+        raise TypeError(
+            "_global cannot contain '_' — positionals belong after the subcommand"
+        )
+    return global_options
+
+
+def _argv(
+    subcommand: Sequence[str],
+    options: dict,
+    equals_flags: set[str] | None,
+) -> list[str]:
+    global_options = _pop_global(options)
+    return [
+        BINARY,
+        *_to_args(global_options, GLOBAL_EQUALS),
+        *subcommand,
+        *_to_args(options, equals_flags),
+    ]
+
+
 def _run_sync(
     subcommand: Sequence[str],
     options: dict,
     equals_flags: set[str] | None = None,
 ) -> CommandResult:
     completed = subprocess.run(
-        [BINARY, *subcommand, *_to_args(options, equals_flags)],
+        _argv(subcommand, options, equals_flags),
         capture_output=True,
         text=True,
         check=False,
@@ -183,7 +213,7 @@ async def _run_async(
     equals_flags: set[str] | None = None,
 ) -> CommandResult:
     proc = await asyncio.create_subprocess_exec(
-        BINARY, *subcommand, *_to_args(options, equals_flags),
+        *_argv(subcommand, options, equals_flags),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
@@ -199,7 +229,11 @@ async def _run_async(
 def generate_wrapper(schema: CliSchema) -> str:
     """Emit a standalone Python wrapper for the given schema."""
     binary = schema.binary_name
-    lines: list[str] = [_RUNTIME_TEMPLATE.format(binary=binary, short_max=SHORT_FLAG_MAX_LENGTH)]
+    lines: list[str] = [_RUNTIME_TEMPLATE.format(
+        binary=binary,
+        short_max=SHORT_FLAG_MAX_LENGTH,
+        global_equals=_set_literal(_equals_keys(schema.command.flags)),
+    )]
 
     for sub, ident in _subcommand_function_names(schema.command.subcommands):
         sub_repr = _json.dumps([sub.name])
@@ -282,6 +316,7 @@ def generate_stub(schema: CliSchema) -> str:
         out.append("    *,")
         out.extend(sigs)
         out.append(f"    _: str | Sequence[str] | None = ...,")
+        out.append(f"    _global: dict[str, Any] | None = ...,")
         out.append(") -> CommandResult: ...")
         out.append("")
         return out

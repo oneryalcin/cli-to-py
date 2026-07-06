@@ -35,24 +35,26 @@ from .command_string import to_command_string
 from .exec import CommandProcess, run_command, spawn_command
 from .parse_subcommands import parse_subcommand_help
 from .schema import ParsedCommand, ParsedSubcommand
-from .validate import ValidationError, validate_options
+from .validate import ValidationError, validate_global_options, validate_options
 
 
 class CliApi(_BaseCliApi):
     """Async, callable Pythonic wrapper around a CLI binary."""
 
     def __call__(self, subcommand: str | None = None, /, **kwargs: Any) -> CommandFuture:
-        options, per_call = self._split_kwargs(kwargs)
+        options, global_opts, per_call = self._split_kwargs(kwargs)
         if subcommand is not None:
             resolved = self._resolve_alias(subcommand)
             equals = self._equals_for(resolved)
             return CommandFuture(run_command(
                 self.binary_name, [resolved], options,
-                self._merged_config(per_call), equals,
+                self._merged_config(per_call), equals, global_opts,
+                self._equals_flags,
             ))
         return CommandFuture(run_command(
             self.binary_name, [], options,
-            self._merged_config(per_call), self._equals_flags,
+            self._merged_config(per_call), self._equals_flags, global_opts,
+            self._equals_flags,
         ))
 
     def __getattr__(self, name: str) -> Any:
@@ -69,10 +71,11 @@ class CliApi(_BaseCliApi):
         equals = self._equals_for(resolved)
 
         def dispatch(**kwargs: Any) -> CommandFuture:
-            options, per_call = self._split_kwargs(kwargs)
+            options, global_opts, per_call = self._split_kwargs(kwargs)
             return CommandFuture(run_command(
                 self.binary_name, [resolved], options,
-                self._merged_config(per_call), equals,
+                self._merged_config(per_call), equals, global_opts,
+                self._equals_flags,
             ))
         dispatch.__name__ = name
         return dispatch
@@ -88,8 +91,15 @@ class CliApi(_BaseCliApi):
     def validate(
         self, subcommand: str | None = None, /, **options: Any
     ) -> list[ValidationError]:
+        # Same reserved-kwarg contract as execution: a shape validate()
+        # accepts must be a shape __call__ accepts.
+        options, global_opts, _cfg = self._split_kwargs(options)
+        global_errors = (
+            validate_global_options(self.schema.command, global_opts)
+            if global_opts else []
+        )
         if subcommand is None:
-            return validate_options(self.schema.command, options)
+            return [*global_errors, *validate_options(self.schema.command, options)]
         sub = self._find_subcommand(subcommand)
         if sub is None:
             raise ValueError(
@@ -106,24 +116,31 @@ class CliApi(_BaseCliApi):
             flags=sub.flags,
             positional_args=sub.positional_args or [],
         )
-        return validate_options(fake_command, options)
+        return [*global_errors, *validate_options(fake_command, options)]
 
-    def command_string(self, subcommand: str | None = None, /, **options: Any) -> str:
+    def command_string(self, subcommand: str | None = None, /, **kwargs: Any) -> str:
+        options, global_opts, _per_call = self._split_kwargs(kwargs)
         if subcommand is None:
-            return to_command_string(self.binary_name, [], options, self._equals_flags)
+            return to_command_string(
+                self.binary_name, [], options, self._equals_flags, global_opts,
+                self._equals_flags,
+            )
         resolved = self._resolve_alias(subcommand)
         return to_command_string(
-            self.binary_name, [resolved], options, self._equals_for(resolved)
+            self.binary_name, [resolved], options, self._equals_for(resolved),
+            global_opts, self._equals_flags,
         )
 
     async def spawn(
         self, subcommand: str | None = None, /, **kwargs: Any
     ) -> CommandProcess:
-        options, per_call = self._split_kwargs(kwargs)
+        options, global_opts, per_call = self._split_kwargs(kwargs)
         subs = [self._resolve_alias(subcommand)] if subcommand else []
         equals = self._equals_for(subs[0]) if subs else self._equals_flags
         return await spawn_command(
-            self.binary_name, subs, options, self._merged_config(per_call), equals
+            self.binary_name, subs, options,
+            self._merged_config(per_call), equals, global_opts,
+            self._equals_flags,
         )
 
     async def parse(self, subcommand_name: str | None = None) -> ParsedCommand | None:

@@ -61,6 +61,45 @@ class TestGitSync:
         assert isinstance(branch, str)
 
 
+@pytest.mark.skipif(_missing("git"), reason="git not installed")
+class TestGitGlobalOptions:
+    """Issue #7: `git -C <path> log` — -C must render BEFORE the subcommand.
+    Targets a repo the process cwd is NOT in, so the test fails if _global
+    ever renders after the subcommand again."""
+
+    async def test_global_c_targets_foreign_repo(self, tmp_path):
+        import os
+
+        api = await convert("git", subcommands=False)
+        init = await api("init", _=[str(tmp_path)])
+        assert init.exit_code == 0
+
+        result = await api("rev-parse", _global={"C": str(tmp_path)}, show_toplevel=True)
+        assert result.exit_code == 0, result.stderr
+        assert os.path.realpath(result.text()) == os.path.realpath(str(tmp_path))
+
+        # dot dispatch goes through a separate closure — cover it too
+        status = await api.status(_global={"C": str(tmp_path)}, short=True)
+        assert status.exit_code == 0, status.stderr
+
+    async def test_post_subcommand_placement_still_fails(self, tmp_path):
+        # Negative control: the pre-fix call shape must keep failing, proving
+        # the positive test above exercises real ordering.
+        api = await convert("git", subcommands=False)
+        await api("init", _=[str(tmp_path)])
+        result = await api("rev-parse", C=str(tmp_path), show_toplevel=True)
+        assert result.exit_code != 0
+
+    def test_global_c_sync(self, tmp_path):
+        import os
+
+        api = convert_sync("git", subcommands=False)
+        assert api("init", _=[str(tmp_path)]).exit_code == 0
+        result = api("rev-parse", _global={"C": str(tmp_path)}, show_toplevel=True)
+        assert result.exit_code == 0, result.stderr
+        assert os.path.realpath(result.text()) == os.path.realpath(str(tmp_path))
+
+
 @pytest.mark.skipif(_missing("uv"), reason="uv not installed")
 class TestUvEnrichment:
     async def test_convert_enriches_subcommands(self):

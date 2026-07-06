@@ -74,6 +74,52 @@ def test_wrapper_preserves_equals_flags():
     ]
 
 
+def test_wrapper_renders_global_before_subcommand():
+    schema = parse_help_text("grab", REACT_GRAB_HELP)
+    code = generate_wrapper(schema)
+    namespace = {}
+    exec(code, namespace)
+    argv = namespace["_argv"](["init"], {"_global": {"C": "/repo"}, "force": True}, set())
+    assert argv == ["grab", "-C", "/repo", "init", "--force"]
+
+
+def test_wrapper_global_uses_root_equals_policy():
+    help_text = (
+        "Usage: foo [options]\n\nOptions:\n  --config=<path>  config\n\n"
+        "Commands:\n  run  run it\n"
+    )
+    schema = parse_help_text("foo", help_text)
+    code = generate_wrapper(schema)
+    namespace = {}
+    exec(code, namespace)
+    argv = namespace["_argv"](["run"], {"_global": {"config": "a.toml"}}, set())
+    assert argv == ["foo", "--config=a.toml", "run"]
+
+
+def test_wrapper_global_must_be_dict():
+    import pytest
+    schema = parse_help_text("grab", REACT_GRAB_HELP)
+    namespace = {}
+    exec(generate_wrapper(schema), namespace)
+    with pytest.raises(TypeError, match="_global"):
+        namespace["_argv"](["init"], {"_global": ["-C", "/repo"]}, set())
+
+
+def test_wrapper_global_rejects_positionals():
+    import pytest
+    schema = parse_help_text("grab", REACT_GRAB_HELP)
+    namespace = {}
+    exec(generate_wrapper(schema), namespace)
+    with pytest.raises(TypeError, match="positionals"):
+        namespace["_argv"](["init"], {"_global": {"_": ["x"]}}, set())
+
+
+def test_stub_includes_global_kwarg():
+    schema = parse_help_text("grab", REACT_GRAB_INIT_HELP)
+    stub = generate_stub(schema)
+    assert "_global: dict[str, Any] | None = ..." in stub
+
+
 def test_wrapper_avoids_identifier_collisions():
     help_text = "Usage: foo [options]\n\nCommands:\n  foo-bar  first\n  foo_bar  second\n"
     schema = parse_help_text("foo", help_text)

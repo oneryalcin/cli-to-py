@@ -20,6 +20,14 @@ result = git_wrapper.status(short=True)
 result = await git_wrapper.status_async(short=True)
 ```
 
+Generated functions support the same call shapes as the live API, including
+`_` for positionals and `_global` for pre-subcommand options:
+
+```python
+git_wrapper.log(_global={"C": "/path/to/repo"}, max_count=15)
+# runs: git -C /path/to/repo log --max-count 15
+```
+
 ## JSON and Stubs
 
 ```bash

@@ -48,6 +48,8 @@ def run_command_sync(
     options: dict[str, Any] | None = None,
     config: RunConfig | None = None,
     equals_flags: set[str] | None = None,
+    global_options: dict[str, Any] | None = None,
+    global_equals_flags: set[str] | None = None,
 ) -> CommandResult:
     subs = list(subcommands or [])
     cfg = config or RunConfig()
@@ -59,7 +61,9 @@ def run_command_sync(
             "Use the async run_command() for cooperative cancellation."
         )
 
-    argv = _prepare_argv(binary, subs, options, equals_flags)
+    argv = _prepare_argv(
+        binary, subs, options, equals_flags, global_options, global_equals_flags
+    )
     env = build_env(cfg)
     timeout = cfg.resolved_timeout()
     stdio = cfg.resolved_stdio()

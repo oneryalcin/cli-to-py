@@ -10,7 +10,7 @@ Uses fromHelpText so we don't depend on real binaries. Exercises:
 """
 
 from cli_to_py import from_help_text, from_help_text_sync
-from tests.fixtures import REACT_GRAB_HELP, REACT_GRAB_INIT_HELP
+from tests.fixtures import CLAP_STYLE_HELP, REACT_GRAB_HELP, REACT_GRAB_INIT_HELP
 
 
 def test_api_exposes_binary_name():
@@ -135,6 +135,83 @@ class TestConfigKwargSafety:
         with pytest.raises(TypeError, match="RunConfig"):
             api("init", _config="not a runconfig")
 
+
+class TestGlobalOptions:
+    """`_global` options must render BEFORE the subcommand (issue #7):
+    git -C /path log, docker --context x ps — placing them after is
+    rejected by the binary."""
+
+    def test_global_renders_before_subcommand(self):
+        api = from_help_text("git", REACT_GRAB_HELP)
+        cmd = api.command_string("init", _global={"C": "/repo"}, force=True)
+        assert cmd == "git -C /repo init --force"
+
+    def test_global_without_subcommand(self):
+        api = from_help_text("git", REACT_GRAB_HELP)
+        assert api.command_string(_global={"C": "/repo"}) == "git -C /repo"
+
+    def test_global_long_flag_and_value(self):
+        api = from_help_text("docker", REACT_GRAB_HELP)
+        cmd = api.command_string("init", _global={"context": "prod"})
+        assert cmd == "docker --context prod init"
+
+    def test_sync_api_global_renders_before_subcommand(self):
+        api = from_help_text_sync("git", REACT_GRAB_HELP)
+        cmd = api.command_string("init", _global={"C": "/repo"})
+        assert cmd == "git -C /repo init"
+
+    def test_global_must_be_dict(self):
+        api = from_help_text("git", REACT_GRAB_HELP)
+        import pytest
+        with pytest.raises(TypeError, match="_global"):
+            api.command_string("init", _global=["-C", "/repo"])
+
+    def test_global_rejects_positionals(self):
+        api = from_help_text("git", REACT_GRAB_HELP)
+        import pytest
+        with pytest.raises(TypeError, match="positionals"):
+            api.command_string("init", _global={"_": ["x"]})
+
+    def test_global_uses_root_equals_policy(self):
+        # A subcommand may define a same-named flag with equals form; the
+        # global bucket must keep the ROOT form or the binary rejects it.
+        from cli_to_py import parse_help_text
+        api = from_help_text(
+            "tool",
+            "Usage: tool [options]\n\nOptions:\n  --log-level <level>  level\n\n"
+            "Commands:\n  run  run it\n",
+        )
+        sub_help = "Usage: tool run [options]\n\nOptions:\n  --log-level=<level>  level\n"
+        api.schema.command.subcommands[0].flags = (
+            parse_help_text("tool", sub_help).command.flags
+        )
+        cmd = api.command_string("run", _global={"log_level": "info"}, log_level="debug")
+        assert cmd == "tool --log-level info run --log-level=debug"
+
+    def test_validate_rejects_non_dict_global_like_call(self):
+        # validate() must not approve a shape __call__ raises on.
+        api = from_help_text("git", REACT_GRAB_HELP)
+        import pytest
+        with pytest.raises(TypeError, match="_global"):
+            api.validate(_global=["-C", "/repo"])
+
+    def test_validate_rejects_positionals_in_global_like_call(self):
+        api = from_help_text("git", REACT_GRAB_HELP)
+        import pytest
+        with pytest.raises(TypeError, match="positionals"):
+            api.validate(_global={"_": ["x"]})
+
+    def test_validate_accepts_known_global_flag(self):
+        api = from_help_text("uv", CLAP_STYLE_HELP)
+        assert api.validate(_global={"verbose": True}) == []
+
+    def test_validate_flags_unknown_global_key(self):
+        api = from_help_text("uv", CLAP_STYLE_HELP)
+        errors = api.validate(_global={"definitely_not_a_flag": True})
+        assert any(
+            e.kind == "unknown-flag" and e.name == "definitely_not_a_flag"
+            for e in errors
+        )
 
 class TestCommandResultHelpers:
     """text()/lines()/json() live directly on CommandResult now."""
