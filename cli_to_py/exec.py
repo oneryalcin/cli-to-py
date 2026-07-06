@@ -65,12 +65,17 @@ def _prepare_argv(
     options: dict[str, Any] | None,
     equals_flags: set[str] | None,
     global_options: dict[str, Any] | None = None,
+    global_equals_flags: set[str] | None = None,
 ) -> list[str]:
     # Global options render BEFORE the subcommand: git -C /path log, docker
-    # --context x ps. Rendering them after is rejected by many CLIs.
+    # --context x ps. Rendering them after is rejected by many CLIs. They use
+    # the root command's equals policy, not the subcommand's — a subcommand may
+    # define a same-named flag with a different form.
+    if global_equals_flags is None:
+        global_equals_flags = equals_flags
     return [
         binary,
-        *options_to_args(global_options or {}, equals_flags),
+        *options_to_args(global_options or {}, global_equals_flags),
         *subcommands,
         *options_to_args(options or {}, equals_flags),
     ]
@@ -183,6 +188,7 @@ async def run_command(
     config: RunConfig | None = None,
     equals_flags: set[str] | None = None,
     global_options: dict[str, Any] | None = None,
+    global_equals_flags: set[str] | None = None,
 ) -> CommandResult:
     """Run `binary [global options] subcommands [args from options]`.
 
@@ -192,7 +198,9 @@ async def run_command(
     """
     subs = list(subcommands or [])
     cfg = config or RunConfig()
-    argv = _prepare_argv(binary, subs, options, equals_flags, global_options)
+    argv = _prepare_argv(
+        binary, subs, options, equals_flags, global_options, global_equals_flags
+    )
     env = build_env(cfg)
     timeout = cfg.resolved_timeout()
     stdio = cfg.resolved_stdio()
@@ -422,6 +430,7 @@ async def spawn_command(
     config: RunConfig | None = None,
     equals_flags: set[str] | None = None,
     global_options: dict[str, Any] | None = None,
+    global_equals_flags: set[str] | None = None,
 ) -> CommandProcess:
     """Spawn a long-running process and return a CommandProcess for streaming.
 
@@ -430,7 +439,9 @@ async def spawn_command(
     """
     subs = list(subcommands or [])
     cfg = config or RunConfig()
-    argv = _prepare_argv(binary, subs, options, equals_flags, global_options)
+    argv = _prepare_argv(
+        binary, subs, options, equals_flags, global_options, global_equals_flags
+    )
     env = build_env(cfg)
     proc = await _spawn(
         argv,

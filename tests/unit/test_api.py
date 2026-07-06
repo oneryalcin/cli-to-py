@@ -172,6 +172,35 @@ class TestGlobalOptions:
         with pytest.raises(TypeError, match="positionals"):
             api.command_string("init", _global={"_": ["x"]})
 
+    def test_global_uses_root_equals_policy(self):
+        # A subcommand may define a same-named flag with equals form; the
+        # global bucket must keep the ROOT form or the binary rejects it.
+        from cli_to_py import parse_help_text
+        api = from_help_text(
+            "tool",
+            "Usage: tool [options]\n\nOptions:\n  --log-level <level>  level\n\n"
+            "Commands:\n  run  run it\n",
+        )
+        sub_help = "Usage: tool run [options]\n\nOptions:\n  --log-level=<level>  level\n"
+        api.schema.command.subcommands[0].flags = (
+            parse_help_text("tool", sub_help).command.flags
+        )
+        cmd = api.command_string("run", _global={"log_level": "info"}, log_level="debug")
+        assert cmd == "tool --log-level info run --log-level=debug"
+
+    def test_validate_rejects_non_dict_global_like_call(self):
+        # validate() must not approve a shape __call__ raises on.
+        api = from_help_text("git", REACT_GRAB_HELP)
+        import pytest
+        with pytest.raises(TypeError, match="_global"):
+            api.validate(_global=["-C", "/repo"])
+
+    def test_validate_rejects_positionals_in_global_like_call(self):
+        api = from_help_text("git", REACT_GRAB_HELP)
+        import pytest
+        with pytest.raises(TypeError, match="positionals"):
+            api.validate(_global={"_": ["x"]})
+
     def test_validate_accepts_known_global_flag(self):
         api = from_help_text("uv", CLAP_STYLE_HELP)
         assert api.validate(_global={"verbose": True}) == []

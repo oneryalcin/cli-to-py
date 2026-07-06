@@ -49,10 +49,12 @@ class CliApi(_BaseCliApi):
             return CommandFuture(run_command(
                 self.binary_name, [resolved], options,
                 self._merged_config(per_call), equals, global_opts,
+                self._equals_flags,
             ))
         return CommandFuture(run_command(
             self.binary_name, [], options,
             self._merged_config(per_call), self._equals_flags, global_opts,
+            self._equals_flags,
         ))
 
     def __getattr__(self, name: str) -> Any:
@@ -73,6 +75,7 @@ class CliApi(_BaseCliApi):
             return CommandFuture(run_command(
                 self.binary_name, [resolved], options,
                 self._merged_config(per_call), equals, global_opts,
+                self._equals_flags,
             ))
         dispatch.__name__ = name
         return dispatch
@@ -88,10 +91,12 @@ class CliApi(_BaseCliApi):
     def validate(
         self, subcommand: str | None = None, /, **options: Any
     ) -> list[ValidationError]:
-        global_opts = options.pop("_global", None)
+        # Same reserved-kwarg contract as execution: a shape validate()
+        # accepts must be a shape __call__ accepts.
+        options, global_opts, _cfg = self._split_kwargs(options)
         global_errors = (
             validate_global_options(self.schema.command, global_opts)
-            if isinstance(global_opts, dict) else []
+            if global_opts else []
         )
         if subcommand is None:
             return [*global_errors, *validate_options(self.schema.command, options)]
@@ -117,11 +122,13 @@ class CliApi(_BaseCliApi):
         options, global_opts, _per_call = self._split_kwargs(kwargs)
         if subcommand is None:
             return to_command_string(
-                self.binary_name, [], options, self._equals_flags, global_opts
+                self.binary_name, [], options, self._equals_flags, global_opts,
+                self._equals_flags,
             )
         resolved = self._resolve_alias(subcommand)
         return to_command_string(
-            self.binary_name, [resolved], options, self._equals_for(resolved), global_opts
+            self.binary_name, [resolved], options, self._equals_for(resolved),
+            global_opts, self._equals_flags,
         )
 
     async def spawn(
@@ -133,6 +140,7 @@ class CliApi(_BaseCliApi):
         return await spawn_command(
             self.binary_name, subs, options,
             self._merged_config(per_call), equals, global_opts,
+            self._equals_flags,
         )
 
     async def parse(self, subcommand_name: str | None = None) -> ParsedCommand | None:

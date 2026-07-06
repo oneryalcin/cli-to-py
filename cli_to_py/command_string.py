@@ -14,11 +14,14 @@ def to_command_string(
     options: dict[str, Any] | None = None,
     equals_flags: set[str] | None = None,
     global_options: dict[str, Any] | None = None,
+    global_equals_flags: set[str] | None = None,
 ) -> str:
     subs = list(subcommands or [])
+    if global_equals_flags is None:
+        global_equals_flags = equals_flags
     parts = [
         binary,
-        *options_to_args(global_options or {}, equals_flags),
+        *options_to_args(global_options or {}, global_equals_flags),
         *subs,
         *options_to_args(options or {}, equals_flags),
     ]
