@@ -47,8 +47,8 @@ class CliApi(_BaseCliApi):
         options, global_opts, per_call = self._split_kwargs(kwargs)
         return CommandFuture(run_command(
             self.binary_name, subs, options,
-            self._merged_config(per_call), self._equals_for_path(subs), global_opts,
-            self._equals_flags,
+            self._merged_config(per_call), self._equals_for_path(subs, options), global_opts,
+            self._global_equals(global_opts),
         ))
 
     def __call__(self, subcommand: str | None = None, /, **kwargs: Any) -> CommandFuture:
@@ -110,8 +110,8 @@ class CliApi(_BaseCliApi):
         options, global_opts, _per_call = self._split_kwargs(kwargs)
         subs = self._resolve_path(subcommand) if subcommand else []
         return to_command_string(
-            self.binary_name, subs, options, self._equals_for_path(subs),
-            global_opts, self._equals_flags,
+            self.binary_name, subs, options, self._equals_for_path(subs, options),
+            global_opts, self._global_equals(global_opts),
         )
 
     async def spawn(
@@ -121,8 +121,8 @@ class CliApi(_BaseCliApi):
         subs = self._resolve_path(subcommand) if subcommand else []
         return await spawn_command(
             self.binary_name, subs, options,
-            self._merged_config(per_call), self._equals_for_path(subs), global_opts,
-            self._equals_flags,
+            self._merged_config(per_call), self._equals_for_path(subs, options), global_opts,
+            self._global_equals(global_opts),
         )
 
     async def parse(self, subcommand_name: str | None = None) -> ParsedCommand | None:

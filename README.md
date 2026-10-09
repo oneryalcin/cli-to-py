@@ -53,8 +53,15 @@ Flags use Python names and are converted to CLI flags:
 
 ```python
 await git.commit(message="fix", all=True)
-# runs: git commit --message fix --all
+# runs: git commit --message=fix --all
 ```
+
+Flag values render as two arguments (`--output file.txt`), the form
+hand-rolled parsers like curl and jq require. git is the exception: its
+long flags bind inline (`--format=%s`), because git's revision options
+(`--format`, `--pretty`, `--color`) accept nothing else. Single-letter flags
+always keep the space form (`-C /path`). Opt another git-style binary in with
+`convert("tool", inline_values=True)`.
 
 Use `_` for positional arguments:
 
@@ -68,7 +75,7 @@ Use `_global` for options that must come **before** the subcommand
 
 ```python
 await git("log", _global={"C": "/path/to/repo"}, max_count=15)
-# runs: git -C /path/to/repo log --max-count 15
+# runs: git -C /path/to/repo log --max-count=15
 ```
 
 Nested command trees dispatch fluently, or as a space-separated string:

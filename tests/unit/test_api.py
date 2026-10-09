@@ -436,3 +436,21 @@ class TestCommandResultHelpers:
         from cli_to_py.schema import CommandResult
         assert CommandResult("", "", 0).ok() is True
         assert CommandResult("", "", 1).ok() is False
+
+
+class TestInlineValues:
+    """git binds long-flag values inline; everything else keeps the space
+    form unless the caller opts in (#10)."""
+
+    def test_git_long_flags_bind_inline_short_flags_do_not(self):
+        api = from_help_text("git", REACT_GRAB_HELP)
+        cmd = api.command_string("log", _global={"C": "/repo"}, format="%s", n=1)
+        assert cmd == "git -C /repo log --format=%s -n 1"
+
+    def test_other_binaries_keep_the_space_form(self):
+        api = from_help_text("curl", REACT_GRAB_HELP)
+        assert api.command_string(max_time=1) == "curl --max-time 1"
+
+    def test_opt_in_for_other_git_style_binaries(self):
+        api = from_help_text("tool", REACT_GRAB_HELP, inline_values=True)
+        assert api.command_string(log_level="debug") == "tool --log-level=debug"

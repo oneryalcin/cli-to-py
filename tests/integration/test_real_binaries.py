@@ -36,6 +36,13 @@ class TestGitAsync:
         assert re.fullmatch(r"[A-Za-z0-9._/\-]+", branch), \
             f"unexpected branch output: {branch!r}"
 
+    async def test_optional_value_long_flag_runs(self):
+        # `git log --format %s` treats %s as a revision; only the inline
+        # form works, which an agent's natural first call needs (#10)
+        api = await convert("git", subcommands=False)
+        result = await api.log(format="%s", max_count=1)
+        assert result.exit_code == 0, result.stderr
+
     async def test_command_string(self):
         api = await convert("git", subcommands=False)
         cmd = api.command_string("commit", message="x", all=True)
@@ -159,3 +166,46 @@ class TestPythonBinary:
         assert result.exit_code == 0
         combined = result.stdout + result.stderr
         assert "Python" in combined
+
+
+@pytest.mark.skipif(_missing("curl"), reason="curl not installed")
+async def test_default_space_form_is_what_curl_accepts():
+    # why inline is NOT the default: curl rejects `--max-time=1` as an
+    # unknown option (so does jq's --indent=2) — #10
+    api = await convert("curl", subcommands=False)
+    result = await api(max_time=1, silent=True, _=["file:///dev/null"])
+    assert result.exit_code == 0, result.stderr
+
+
+@pytest.mark.skipif(_missing("git"), reason="git not installed")
+async def test_git_by_absolute_path_binds_inline():
+    # the policy keys on the executable name, not the literal string "git"
+    api = await convert(shutil.which("git"), subcommands=False)
+    result = await api.log(format="%s", max_count=1)
+    assert result.exit_code == 0, result.stderr
+
+
+@pytest.mark.skipif(_missing("git"), reason="git not installed")
+def test_generated_git_wrapper_binds_inline():
+    # the wrapper carries its own renderer; it must follow the same policy
+    from cli_to_py.generate import generate_wrapper
+
+    namespace: dict = {}
+    code = generate_wrapper(convert_sync("git", subcommands=False).schema)
+    exec(code, namespace)  # noqa: S102
+    result = namespace["log"](format="%s", max_count=1)
+    assert result.exit_code == 0, result.stderr
+
+
+@pytest.mark.skipif(_missing("jq"), reason="jq not installed")
+def test_wrapper_and_library_honor_the_same_override():
+    # one call, two interfaces, one argv: an explicit inline_values must
+    # reach generated wrappers too (jq rejects --indent=2)
+    from cli_to_py.generate import generate_wrapper
+
+    api = convert_sync("jq", subcommands=False, inline_values=True)
+    namespace: dict = {}
+    exec(generate_wrapper(api.schema, inline_values=True), namespace)  # noqa: S102
+    library = api(indent=2, null_input=True, _=["."])
+    wrapper = namespace["run"](indent=2, null_input=True, _=["."])
+    assert library.exit_code == wrapper.exit_code != 0
