@@ -17,7 +17,7 @@ import re
 
 
 from .case import kebab_to_snake
-from .constants import SHORT_FLAG_MAX_LENGTH
+from .constants import SHORT_FLAG_MAX_LENGTH, default_inline_values
 from .schema import CliSchema, ParsedFlag, ParsedSubcommand
 
 
@@ -109,6 +109,8 @@ from typing import Any, Sequence
 
 BINARY: str = {binary!r}
 GLOBAL_EQUALS: set[str] = {global_equals}
+# long flags render --flag=value for every call (cli-to-py inline_values)
+INLINE_VALUES: bool = {inline_values!r}
 
 
 @dataclass
@@ -142,7 +144,9 @@ def _to_args(options: dict, equals_flags: set[str] | None = None) -> list[str]:
             flag_name = f"-{{key}}"
         else:
             flag_name = f"--{{_snake_to_kebab(key)}}"
-        use_equals = key in equals_flags
+        use_equals = key in equals_flags or (
+            INLINE_VALUES and flag_name.startswith("--")
+        )
         if isinstance(value, bool):
             if value:
                 flag_args.append(flag_name)
@@ -233,6 +237,7 @@ def generate_wrapper(schema: CliSchema) -> str:
         binary=binary,
         short_max=SHORT_FLAG_MAX_LENGTH,
         global_equals=_set_literal(_equals_keys(schema.command.flags)),
+        inline_values=default_inline_values(binary),
     )]
 
     for sub, ident in _subcommand_function_names(schema.command.subcommands):

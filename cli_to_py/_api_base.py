@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .case import kebab_to_snake, snake_to_kebab
-from .constants import SHORT_FLAG_MAX_LENGTH
+from .constants import SHORT_FLAG_MAX_LENGTH, default_inline_values
 from .run_config import RunConfig
 from .schema import CliSchema, ParsedSubcommand
 
@@ -73,14 +73,6 @@ class _SubcommandProxy:
         return f"<{self._api.binary_name} {' '.join(self._path)} dispatcher>"
 
 
-# binaries whose long flags render --flag=value by default. git's revision
-# options (--format, --pretty, --color, --abbrev) accept ONLY the inline
-# form, and its other value flags accept both. The default stays the space
-# form because hand-rolled parsers reject inline: curl ("option
-# --max-time=1: is unknown") and jq ("Unknown option --indent=2") (#10).
-INLINE_VALUE_BINARIES = frozenset({"git"})
-
-
 class _BaseCliApi:
     """Base class holding dispatch/resolution plumbing shared by CliApi and SyncCliApi.
 
@@ -106,7 +98,7 @@ class _BaseCliApi:
         self.schema = schema
         self._default_config = default_config or RunConfig()
         self.inline_values = (
-            binary_name in INLINE_VALUE_BINARIES
+            default_inline_values(binary_name)
             if inline_values is None
             else inline_values
         )

@@ -175,3 +175,23 @@ async def test_default_space_form_is_what_curl_accepts():
     api = await convert("curl", subcommands=False)
     result = await api(max_time=1, silent=True, _=["file:///dev/null"])
     assert result.exit_code == 0, result.stderr
+
+
+@pytest.mark.skipif(_missing("git"), reason="git not installed")
+async def test_git_by_absolute_path_binds_inline():
+    # the policy keys on the executable name, not the literal string "git"
+    api = await convert(shutil.which("git"), subcommands=False)
+    result = await api.log(format="%s", max_count=1)
+    assert result.exit_code == 0, result.stderr
+
+
+@pytest.mark.skipif(_missing("git"), reason="git not installed")
+def test_generated_git_wrapper_binds_inline():
+    # the wrapper carries its own renderer; it must follow the same policy
+    from cli_to_py.generate import generate_wrapper
+
+    namespace: dict = {}
+    code = generate_wrapper(convert_sync("git", subcommands=False).schema)
+    exec(code, namespace)  # noqa: S102
+    result = namespace["log"](format="%s", max_count=1)
+    assert result.exit_code == 0, result.stderr
