@@ -56,10 +56,12 @@ await git.commit(message="fix", all=True)
 # runs: git commit --message=fix --all
 ```
 
-Long flags bind their value inline (`--format=%s`): every common parser
-accepts that form, and git-style optional-value flags (`--format`,
-`--pretty`, `--color`) accept nothing else. Single-letter flags keep the
-space form (`-C /path`).
+Flag values render as two arguments (`--output file.txt`), the form
+hand-rolled parsers like curl and jq require. git is the exception: its
+long flags bind inline (`--format=%s`), because git's revision options
+(`--format`, `--pretty`, `--color`) accept nothing else. Single-letter flags
+always keep the space form (`-C /path`). Opt another git-style binary in with
+`convert("tool", inline_values=True)`.
 
 Use `_` for positional arguments:
 

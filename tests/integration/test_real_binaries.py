@@ -166,3 +166,12 @@ class TestPythonBinary:
         assert result.exit_code == 0
         combined = result.stdout + result.stderr
         assert "Python" in combined
+
+
+@pytest.mark.skipif(_missing("curl"), reason="curl not installed")
+async def test_default_space_form_is_what_curl_accepts():
+    # why inline is NOT the default: curl rejects `--max-time=1` as an
+    # unknown option (so does jq's --indent=2) — #10
+    api = await convert("curl", subcommands=False)
+    result = await api(max_time=1, silent=True, _=["file:///dev/null"])
+    assert result.exit_code == 0, result.stderr

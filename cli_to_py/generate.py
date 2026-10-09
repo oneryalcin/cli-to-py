@@ -142,7 +142,7 @@ def _to_args(options: dict, equals_flags: set[str] | None = None) -> list[str]:
             flag_name = f"-{{key}}"
         else:
             flag_name = f"--{{_snake_to_kebab(key)}}"
-        use_equals = key in equals_flags or flag_name.startswith("--")
+        use_equals = key in equals_flags
         if isinstance(value, bool):
             if value:
                 flag_args.append(flag_name)

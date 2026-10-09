@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from .case import kebab_to_snake, snake_to_kebab
+from .constants import SHORT_FLAG_MAX_LENGTH
 from .run_config import RunConfig
 from .schema import CliSchema, ParsedSubcommand
 
@@ -72,6 +73,14 @@ class _SubcommandProxy:
         return f"<{self._api.binary_name} {' '.join(self._path)} dispatcher>"
 
 
+# binaries whose long flags render --flag=value by default. git's revision
+# options (--format, --pretty, --color, --abbrev) accept ONLY the inline
+# form, and its other value flags accept both. The default stays the space
+# form because hand-rolled parsers reject inline: curl ("option
+# --max-time=1: is unknown") and jq ("Unknown option --indent=2") (#10).
+INLINE_VALUE_BINARIES = frozenset({"git"})
+
+
 class _BaseCliApi:
     """Base class holding dispatch/resolution plumbing shared by CliApi and SyncCliApi.
 
@@ -84,16 +93,23 @@ class _BaseCliApi:
     schema: CliSchema
     _default_config: RunConfig
     _equals_flags: set[str]
+    inline_values: bool
 
     def __init__(
         self,
         binary_name: str,
         schema: CliSchema,
         default_config: RunConfig | None = None,
+        inline_values: bool | None = None,
     ):
         self.binary_name = binary_name
         self.schema = schema
         self._default_config = default_config or RunConfig()
+        self.inline_values = (
+            binary_name in INLINE_VALUE_BINARIES
+            if inline_values is None
+            else inline_values
+        )
         self._equals_flags = {
             kebab_to_snake(f.long_name) for f in schema.command.flags if f.uses_equals
         }
@@ -136,7 +152,23 @@ class _BaseCliApi:
             subs = node.subcommands
         return node
 
-    def _equals_for_path(self, path: list[str]) -> set[str]:
+    def _inline(self, equals: set[str], options: dict[str, Any] | None) -> set[str]:
+        """Add every long-flag key of this call when the binary binds inline."""
+        if not self.inline_values or not options:
+            return equals
+        return equals | {
+            key
+            for key in options
+            if key.startswith("--")
+            or (not key.startswith("-") and len(key) > SHORT_FLAG_MAX_LENGTH)
+        }
+
+    def _global_equals(self, global_opts: dict[str, Any] | None) -> set[str]:
+        return self._inline(set(self._equals_flags), global_opts)
+
+    def _equals_for_path(
+        self, path: list[str], options: dict[str, Any] | None = None
+    ) -> set[str]:
         equals = set(self._equals_flags)
         subs = self.schema.command.subcommands
         for part in path:
@@ -146,7 +178,7 @@ class _BaseCliApi:
             if node.flags:
                 equals |= {kebab_to_snake(f.long_name) for f in node.flags if f.uses_equals}
             subs = node.subcommands
-        return equals
+        return self._inline(equals, options)
 
     def _equals_for(self, resolved_sub: str) -> set[str]:
         return self._equals_for_path([resolved_sub])

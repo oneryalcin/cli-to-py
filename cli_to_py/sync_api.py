@@ -31,8 +31,8 @@ class SyncCliApi(_BaseCliApi):
         options, global_opts, per_call = self._split_kwargs(kwargs)
         return run_command_sync(
             self.binary_name, subs, options,
-            self._merged_config(per_call), self._equals_for_path(subs), global_opts,
-            self._equals_flags,
+            self._merged_config(per_call), self._equals_for_path(subs, options), global_opts,
+            self._global_equals(global_opts),
         )
 
     def __call__(
@@ -93,8 +93,8 @@ class SyncCliApi(_BaseCliApi):
         options, global_opts, _per_call = self._split_kwargs(kwargs)
         subs = self._resolve_path(subcommand) if subcommand else []
         return to_command_string(
-            self.binary_name, subs, options, self._equals_for_path(subs),
-            global_opts, self._equals_flags,
+            self.binary_name, subs, options, self._equals_for_path(subs, options),
+            global_opts, self._global_equals(global_opts),
         )
 
     def parse_sync(

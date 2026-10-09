@@ -21,6 +21,7 @@ async def convert(
     subcommands: bool = True,
     use_cache: bool = False,
     default_config: RunConfig | None = None,
+    inline_values: bool | None = None,
 ) -> CliApi:
     """Async: spawn `binary --help`, parse, optionally enrich, return CliApi.
 
@@ -49,7 +50,9 @@ async def convert(
         )
         if use_cache:
             save_cached_schema(schema, subcommands=subcommands)
-    return CliApi(binary_name, schema, default_config=default_config)
+    return CliApi(
+        binary_name, schema, default_config=default_config, inline_values=inline_values
+    )
 
 
 def convert_sync(
@@ -62,6 +65,7 @@ def convert_sync(
     subcommands: bool = True,
     use_cache: bool = False,
     default_config: RunConfig | None = None,
+    inline_values: bool | None = None,
 ) -> SyncCliApi:
     """Sync equivalent of convert(). Uses subprocess.run, no asyncio required."""
     schema = None
@@ -78,7 +82,9 @@ def convert_sync(
         )
         if use_cache:
             save_cached_schema(schema, subcommands=subcommands)
-    return SyncCliApi(binary_name, schema, default_config=default_config)
+    return SyncCliApi(
+        binary_name, schema, default_config=default_config, inline_values=inline_values
+    )
 
 
 def from_help_text(
@@ -86,10 +92,13 @@ def from_help_text(
     help_text: str,
     *,
     default_config: RunConfig | None = None,
+    inline_values: bool | None = None,
 ) -> CliApi:
     """Build a CliApi from static help text (skip spawning)."""
     schema = parse_help_text(binary_name, help_text)
-    return CliApi(binary_name, schema, default_config=default_config)
+    return CliApi(
+        binary_name, schema, default_config=default_config, inline_values=inline_values
+    )
 
 
 def from_help_text_sync(
@@ -97,6 +106,9 @@ def from_help_text_sync(
     help_text: str,
     *,
     default_config: RunConfig | None = None,
+    inline_values: bool | None = None,
 ) -> SyncCliApi:
     schema = parse_help_text(binary_name, help_text)
-    return SyncCliApi(binary_name, schema, default_config=default_config)
+    return SyncCliApi(
+        binary_name, schema, default_config=default_config, inline_values=inline_values
+    )

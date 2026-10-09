@@ -4,12 +4,12 @@ Conventions (mirrors cli-to-js/src/utils/options-to-args.ts):
 
     verbose=True         -> --verbose
     verbose=False        -> omitted
-    output="f.txt"       -> --output=f.txt
+    output="f.txt"       -> --output f.txt
     dry_run=True         -> --dry-run
-    include=["a", "b"]   -> --include=a --include=b
+    include=["a", "b"]   -> --include a --include b
     _=["pos1", "pos2"]   -> pos1 pos2
     v=True               -> -v           (single-char keys become short flags)
-    o="f.txt"            -> -o f.txt     (short flags keep the space form)
+    msg="hi" with equals -> --msg=hi     (for flags that use key=value form)
 
 Raw keys that already start with "-" are passed through unchanged
 (escape hatch for flags whose canonical form would otherwise be re-cased).
@@ -49,11 +49,7 @@ def options_to_args(
         else:
             flag_name = f"--{snake_to_kebab(key)}"
 
-        # long flags bind inline: every getopt_long/argparse/click/clap/cobra
-        # parser accepts --flag=value, while git-style optional-value flags
-        # (--format, --pretty, --color) ONLY accept it (#10). Short flags
-        # keep the conventional space form (-C path).
-        use_equals = key in equals_flags or flag_name.startswith("--")
+        use_equals = key in equals_flags
 
         if isinstance(value, bool):
             if value:

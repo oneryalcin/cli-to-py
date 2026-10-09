@@ -153,7 +153,7 @@ class TestGlobalOptions:
     def test_global_long_flag_and_value(self):
         api = from_help_text("docker", REACT_GRAB_HELP)
         cmd = api.command_string("init", _global={"context": "prod"})
-        assert cmd == "docker --context=prod init"
+        assert cmd == "docker --context prod init"
 
     def test_sync_api_global_renders_before_subcommand(self):
         api = from_help_text_sync("git", REACT_GRAB_HELP)
@@ -172,9 +172,9 @@ class TestGlobalOptions:
         with pytest.raises(TypeError, match="positionals"):
             api.command_string("init", _global={"_": ["x"]})
 
-    def test_global_and_subcommand_long_flags_both_bind_inline(self):
-        # long flags render --flag=value in both buckets (#10); _global
-        # still renders before the subcommand
+    def test_global_uses_root_equals_policy(self):
+        # A subcommand may define a same-named flag with equals form; the
+        # global bucket must keep the ROOT form or the binary rejects it.
         from cli_to_py import parse_help_text
         api = from_help_text(
             "tool",
@@ -186,7 +186,7 @@ class TestGlobalOptions:
             parse_help_text("tool", sub_help).command.flags
         )
         cmd = api.command_string("run", _global={"log_level": "info"}, log_level="debug")
-        assert cmd == "tool --log-level=info run --log-level=debug"
+        assert cmd == "tool --log-level info run --log-level=debug"
 
     def test_validate_rejects_non_dict_global_like_call(self):
         # validate() must not approve a shape __call__ raises on.
@@ -436,3 +436,21 @@ class TestCommandResultHelpers:
         from cli_to_py.schema import CommandResult
         assert CommandResult("", "", 0).ok() is True
         assert CommandResult("", "", 1).ok() is False
+
+
+class TestInlineValues:
+    """git binds long-flag values inline; everything else keeps the space
+    form unless the caller opts in (#10)."""
+
+    def test_git_long_flags_bind_inline_short_flags_do_not(self):
+        api = from_help_text("git", REACT_GRAB_HELP)
+        cmd = api.command_string("log", _global={"C": "/repo"}, format="%s", n=1)
+        assert cmd == "git -C /repo log --format=%s -n 1"
+
+    def test_other_binaries_keep_the_space_form(self):
+        api = from_help_text("curl", REACT_GRAB_HELP)
+        assert api.command_string(max_time=1) == "curl --max-time 1"
+
+    def test_opt_in_for_other_git_style_binaries(self):
+        api = from_help_text("tool", REACT_GRAB_HELP, inline_values=True)
+        assert api.command_string(log_level="debug") == "tool --log-level=debug"
