@@ -130,3 +130,14 @@ def test_wrapper_avoids_identifier_collisions():
     assert "def foo_bar(" in code
     assert "def foo_bar_2(" in code
     assert code.count("def foo_bar(") == 1
+
+
+def test_wrapper_renders_flags_like_the_runtime():
+    # the generated script carries its own copy of the renderer; the two
+    # drifted silently would mean a wrapper that runs different argv
+    from cli_to_py.options_to_args import options_to_args
+
+    namespace: dict = {}
+    exec(generate_wrapper(parse_help_text("grab", REACT_GRAB_HELP)), namespace)  # noqa: S102
+    options = {"format": "%s", "C": "/repo", "include": ["a", "b"], "all": True}
+    assert namespace["_to_args"](options) == options_to_args(options)

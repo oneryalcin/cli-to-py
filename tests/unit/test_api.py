@@ -153,7 +153,7 @@ class TestGlobalOptions:
     def test_global_long_flag_and_value(self):
         api = from_help_text("docker", REACT_GRAB_HELP)
         cmd = api.command_string("init", _global={"context": "prod"})
-        assert cmd == "docker --context prod init"
+        assert cmd == "docker --context=prod init"
 
     def test_sync_api_global_renders_before_subcommand(self):
         api = from_help_text_sync("git", REACT_GRAB_HELP)
@@ -172,9 +172,9 @@ class TestGlobalOptions:
         with pytest.raises(TypeError, match="positionals"):
             api.command_string("init", _global={"_": ["x"]})
 
-    def test_global_uses_root_equals_policy(self):
-        # A subcommand may define a same-named flag with equals form; the
-        # global bucket must keep the ROOT form or the binary rejects it.
+    def test_global_and_subcommand_long_flags_both_bind_inline(self):
+        # long flags render --flag=value in both buckets (#10); _global
+        # still renders before the subcommand
         from cli_to_py import parse_help_text
         api = from_help_text(
             "tool",
@@ -186,7 +186,7 @@ class TestGlobalOptions:
             parse_help_text("tool", sub_help).command.flags
         )
         cmd = api.command_string("run", _global={"log_level": "info"}, log_level="debug")
-        assert cmd == "tool --log-level info run --log-level=debug"
+        assert cmd == "tool --log-level=info run --log-level=debug"
 
     def test_validate_rejects_non_dict_global_like_call(self):
         # validate() must not approve a shape __call__ raises on.

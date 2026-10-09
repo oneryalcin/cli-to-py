@@ -20,6 +20,8 @@ Public API:
 
 from __future__ import annotations
 
+from importlib import metadata as _metadata
+
 from .api import CliApi
 from .cache import cache_dir, clear_cache, load_cached_schema, save_cached_schema
 from .command_future import CommandFuture
@@ -53,7 +55,10 @@ from .sync_api import SyncCliApi
 from .sync_exec import run_command_sync, run_for_help_sync
 from .validate import ValidationError, validate_global_options, validate_options
 
-__version__ = "0.1.0"
+try:
+    __version__ = _metadata.version("cli-to-py")
+except _metadata.PackageNotFoundError:  # source checkout without install
+    __version__ = "0.0.0"
 
 __all__ = [
     # version

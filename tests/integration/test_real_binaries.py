@@ -36,6 +36,13 @@ class TestGitAsync:
         assert re.fullmatch(r"[A-Za-z0-9._/\-]+", branch), \
             f"unexpected branch output: {branch!r}"
 
+    async def test_optional_value_long_flag_runs(self):
+        # `git log --format %s` treats %s as a revision; only the inline
+        # form works, which an agent's natural first call needs (#10)
+        api = await convert("git", subcommands=False)
+        result = await api.log(format="%s", max_count=1)
+        assert result.exit_code == 0, result.stderr
+
     async def test_command_string(self):
         api = await convert("git", subcommands=False)
         cmd = api.command_string("commit", message="x", all=True)

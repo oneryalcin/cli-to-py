@@ -10,11 +10,11 @@ def test_subcommand():
 
 
 def test_flag_with_value():
-    assert to_command_string("git", ["commit"], {"message": "hello"}) == "git commit --message hello"
+    assert to_command_string("git", ["commit"], {"message": "hello"}) == "git commit --message=hello"
 
 
 def test_escapes_spaces():
-    assert to_command_string("git", ["commit"], {"message": "fix typo"}) == "git commit --message 'fix typo'"
+    assert to_command_string("git", ["commit"], {"message": "fix typo"}) == "git commit '--message=fix typo'"
 
 
 def test_escapes_special_shell_chars():
@@ -29,7 +29,7 @@ def test_boolean_flag():
 
 
 def test_list_flag():
-    assert to_command_string("git", ["log"], {"author": ["alice", "bob"]}) == "git log --author alice --author bob"
+    assert to_command_string("git", ["log"], {"author": ["alice", "bob"]}) == "git log --author=alice --author=bob"
 
 
 def test_positionals():

@@ -8,8 +8,9 @@ class TestBasicConversions:
     def test_bool_false_omitted(self):
         assert options_to_args({"verbose": False}) == []
 
-    def test_string_value_becomes_pair(self):
-        assert options_to_args({"output": "file.txt"}) == ["--output", "file.txt"]
+    def test_long_flag_value_binds_inline(self):
+        # git-style optional-value flags reject `--format %s` (#10)
+        assert options_to_args({"output": "file.txt"}) == ["--output=file.txt"]
 
     def test_snake_case_becomes_kebab(self):
         assert options_to_args({"dry_run": True}) == ["--dry-run"]
@@ -23,13 +24,13 @@ class TestBasicConversions:
 
 class TestArrays:
     def test_list_repeats_flag(self):
-        assert options_to_args({"include": ["a", "b"]}) == ["--include", "a", "--include", "b"]
+        assert options_to_args({"include": ["a", "b"]}) == ["--include=a", "--include=b"]
 
     def test_empty_list_omitted(self):
         assert options_to_args({"include": []}) == []
 
     def test_tuple_works_like_list(self):
-        assert options_to_args({"include": ("a", "b")}) == ["--include", "a", "--include", "b"]
+        assert options_to_args({"include": ("a", "b")}) == ["--include=a", "--include=b"]
 
 
 class TestPositionals:
@@ -65,7 +66,7 @@ class TestEdgeCases:
         assert options_to_args({"-X": "POST"}) == ["-X", "POST"]
 
     def test_integer_value(self):
-        assert options_to_args({"depth": 3}) == ["--depth", "3"]
+        assert options_to_args({"depth": 3}) == ["--depth=3"]
 
     def test_empty_dict(self):
         assert options_to_args({}) == []
@@ -79,4 +80,4 @@ class TestEdgeCases:
             "author": "Alice",
             "_": ["HEAD~1"],
         })
-        assert args == ["--name-only", "--author", "Alice", "HEAD~1"]
+        assert args == ["--name-only", "--author=Alice", "HEAD~1"]
