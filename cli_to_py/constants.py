@@ -2,7 +2,6 @@
 
 import os
 
-
 HELP_TIMEOUT_S: float = 10.0
 COMMAND_TIMEOUT_S: float = 30.0
 DESCRIPTION_CONTINUATION_INDENT_MIN: int = 6

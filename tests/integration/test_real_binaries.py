@@ -195,3 +195,17 @@ def test_generated_git_wrapper_binds_inline():
     exec(code, namespace)  # noqa: S102
     result = namespace["log"](format="%s", max_count=1)
     assert result.exit_code == 0, result.stderr
+
+
+@pytest.mark.skipif(_missing("jq"), reason="jq not installed")
+def test_wrapper_and_library_honor_the_same_override():
+    # one call, two interfaces, one argv: an explicit inline_values must
+    # reach generated wrappers too (jq rejects --indent=2)
+    from cli_to_py.generate import generate_wrapper
+
+    api = convert_sync("jq", subcommands=False, inline_values=True)
+    namespace: dict = {}
+    exec(generate_wrapper(api.schema, inline_values=True), namespace)  # noqa: S102
+    library = api(indent=2, null_input=True, _=["."])
+    wrapper = namespace["run"](indent=2, null_input=True, _=["."])
+    assert library.exit_code == wrapper.exit_code != 0

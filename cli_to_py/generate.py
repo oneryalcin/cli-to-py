@@ -15,7 +15,6 @@ from __future__ import annotations
 import json as _json
 import re
 
-
 from .case import kebab_to_snake
 from .constants import SHORT_FLAG_MAX_LENGTH, default_inline_values
 from .schema import CliSchema, ParsedFlag, ParsedSubcommand
@@ -230,14 +229,19 @@ async def _run_async(
 '''
 
 
-def generate_wrapper(schema: CliSchema) -> str:
-    """Emit a standalone Python wrapper for the given schema."""
+def generate_wrapper(schema: CliSchema, inline_values: bool | None = None) -> str:
+    """Emit a standalone Python wrapper for the given schema.
+
+    inline_values follows convert(): None means the per-binary default.
+    """
     binary = schema.binary_name
+    if inline_values is None:
+        inline_values = default_inline_values(binary)
     lines: list[str] = [_RUNTIME_TEMPLATE.format(
         binary=binary,
         short_max=SHORT_FLAG_MAX_LENGTH,
         global_equals=_set_literal(_equals_keys(schema.command.flags)),
-        inline_values=default_inline_values(binary),
+        inline_values=inline_values,
     )]
 
     for sub, ident in _subcommand_function_names(schema.command.subcommands):
